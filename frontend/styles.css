@@ -1,0 +1,53 @@
+:root {
+  color-scheme: light;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  background: linear-gradient(180deg, #f6f3ee 0%, #ebe5da 100%);
+  color: #1d1d1d;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+.shell {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 72px 24px;
+}
+
+.eyebrow {
+  margin: 0 0 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.8rem;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(2.5rem, 7vw, 4.5rem);
+  line-height: 0.95;
+}
+
+.lead {
+  max-width: 56ch;
+  margin: 20px 0 32px;
+  font-size: 1.1rem;
+  line-height: 1.6;
+}
+
+.card {
+  padding: 24px;
+  border: 1px solid rgba(29, 29, 29, 0.12);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(12px);
+}
+
+.card h2 {
+  margin-top: 0;
+}
