@@ -1,5 +1,9 @@
 {
   "name": "@extractkit/backend",
   "private": true,
-  "version": "0.1.0"
+  "version": "0.1.0",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1069.0",
+    "@aws-sdk/lib-dynamodb": "^3.1069.0"
+  }
 }

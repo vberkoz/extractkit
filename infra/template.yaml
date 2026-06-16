@@ -11,6 +11,25 @@ Parameters:
     Type: String
 
 Resources:
+  ExtractKitTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref ProjectName
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      BillingMode: PAY_PER_REQUEST
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
   FrontendBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -52,6 +71,19 @@ Resources:
               - sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DynamoDbAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:Query
+                  - dynamodb:TransactWriteItems
+                  - dynamodb:UpdateItem
+                Resource: !GetAtt ExtractKitTable.Arn
       Tags:
         - Key: Project
           Value: !Ref ProjectName
@@ -67,6 +99,9 @@ Resources:
       Code:
         S3Bucket: !Ref CodeS3Bucket
         S3Key: !Ref CodeS3Key
+      Environment:
+        Variables:
+          EXTRACTKIT_TABLE_NAME: !Ref ExtractKitTable
       Timeout: 10
       MemorySize: 256
       Tags:
@@ -96,6 +131,8 @@ Resources:
       Principal: "*"
 
 Outputs:
+  ExtractKitTableName:
+    Value: !Ref ExtractKitTable
   FrontendBucketName:
     Value: !Ref FrontendBucket
   FrontendWebsiteUrl:
