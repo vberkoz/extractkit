@@ -3,8 +3,15 @@ import type {
   APIGatewayProxyResultV2,
   Handler
 } from "aws-lambda";
-import { createHash } from "node:crypto";
-import { getApiKey } from "./dynamodb";
+import { createHash, randomUUID } from "node:crypto";
+import {
+  createJob,
+  getApiKey,
+  getJob,
+  getJobResult,
+  incrementUsage,
+  saveJobResult
+} from "./dynamodb";
 
 type JsonValue =
   | null
@@ -31,6 +38,25 @@ type AuthContext = {
   userId: string;
   apiKeyId: string;
   plan: string;
+};
+
+type ExtractSchemaType = "string" | "number";
+
+type ExtractRequest = {
+  content: string;
+  schema: Record<string, ExtractSchemaType>;
+  options?: {
+    mode?: string;
+  };
+};
+
+type ExtractResponse = {
+  jobId: string;
+  data: Record<string, string | number | null>;
+  confidence: number;
+  usage: {
+    units: number;
+  };
 };
 
 class HttpError extends Error {
@@ -99,14 +125,32 @@ async function handleExtract(
   event: APIGatewayProxyEventV2,
   auth: AuthContext
 ): Promise<APIGatewayProxyResultV2> {
-  void auth;
   const body = parseJsonBody(event);
+  const request = parseExtractRequest(body);
+  const jobId = createJobId("extract");
+  const createdAt = new Date().toISOString();
+  const data = extractData(request.content, request.schema);
+  const response: ExtractResponse = {
+    jobId,
+    data,
+    confidence: 0.5,
+    usage: {
+      units: 1
+    }
+  };
 
-  return ok({
-    mode: "text",
-    received: body,
-    jobId: createJobId("extract")
+  await createJob({
+    jobId,
+    userId: auth.userId,
+    createdAt,
+    apiKeyId: auth.apiKeyId,
+    status: "completed",
+    request: body
   });
+  await saveJobResult(jobId, response);
+  await incrementUsage(auth.userId, getCurrentUsagePeriod(), response.usage.units);
+
+  return ok(response);
 }
 
 async function handleExtractUrl(
@@ -150,7 +194,6 @@ async function handleGetJob(
   event: APIGatewayProxyEventV2,
   auth: AuthContext
 ): Promise<APIGatewayProxyResultV2> {
-  void auth;
   const path = normalizePath(event.rawPath);
   const prefix = "/v1/jobs/";
   const jobId = path.slice(prefix.length);
@@ -159,9 +202,19 @@ async function handleGetJob(
     throw new HttpError(400, "INVALID_JOB_ID", "Job ID is required.");
   }
 
+  const job = await getJob(jobId);
+
+  if (!job || job.userId !== auth.userId) {
+    throw new HttpError(404, "NOT_FOUND", "Job not found.");
+  }
+
+  const jobResult = await getJobResult(jobId);
+
   return ok({
     jobId,
-    status: "completed"
+    status: "completed",
+    createdAt: job.createdAt,
+    result: jobResult?.result ?? null
   });
 }
 
@@ -272,6 +325,55 @@ function getRequiredString(body: Record<string, JsonValue>, key: string): string
   return value;
 }
 
+function parseExtractRequest(body: Record<string, JsonValue>): ExtractRequest {
+  const content = getRequiredString(body, "content");
+  const schemaValue = body.schema;
+
+  if (!isRecord(schemaValue) || Object.keys(schemaValue).length === 0) {
+    throw new HttpError(
+      400,
+      "INVALID_REQUEST",
+      "Request body field 'schema' must be a non-empty object."
+    );
+  }
+
+  const schema: Record<string, ExtractSchemaType> = {};
+
+  for (const [key, value] of Object.entries(schemaValue)) {
+    if (value !== "string" && value !== "number") {
+      throw new HttpError(
+        400,
+        "INVALID_REQUEST",
+        `Schema field '${key}' must be 'string' or 'number'.`
+      );
+    }
+
+    schema[key] = value;
+  }
+
+  const optionsValue = body.options;
+
+  if (optionsValue !== undefined && !isRecord(optionsValue)) {
+    throw new HttpError(400, "INVALID_REQUEST", "Request body field 'options' must be an object.");
+  }
+
+  const mode = optionsValue?.mode;
+
+  if (mode !== undefined && mode !== "sync") {
+    throw new HttpError(
+      400,
+      "INVALID_REQUEST",
+      "Request body field 'options.mode' must be 'sync'."
+    );
+  }
+
+  return {
+    content,
+    schema,
+    options: mode !== undefined ? { mode } : undefined
+  };
+}
+
 function hasNonEmptyString(body: Record<string, JsonValue>, key: string): boolean {
   const value = body[key];
   return typeof value === "string" && value.trim() !== "";
@@ -290,5 +392,97 @@ function normalizePath(path: string): string {
 }
 
 function createJobId(prefix: string): string {
-  return `${prefix}_${Date.now()}`;
+  return `${prefix}_${randomUUID()}`;
+}
+
+function extractData(
+  content: string,
+  schema: Record<string, ExtractSchemaType>
+): Record<string, string | number | null> {
+  const lines = content.split(/\r?\n/);
+  const email = findEmail(content);
+  const firstNumber = findFirstNumber(content);
+  const keyedValues = buildKeyValueMap(lines);
+  const result: Record<string, string | number | null> = {};
+
+  for (const [schemaKey, schemaType] of Object.entries(schema)) {
+    const directMatch = keyedValues.get(normalizeLookupKey(schemaKey));
+
+    if (schemaType === "number") {
+      result[schemaKey] = parseNumberValue(directMatch) ?? firstNumber;
+      continue;
+    }
+
+    if (looksLikeEmailField(schemaKey)) {
+      result[schemaKey] = directMatch ?? email;
+      continue;
+    }
+
+    result[schemaKey] = directMatch ?? null;
+  }
+
+  return result;
+}
+
+function buildKeyValueMap(lines: string[]): Map<string, string> {
+  const values = new Map<string, string>();
+
+  for (const line of lines) {
+    const match = line.match(/^\s*([^:\n]+?)\s*:\s*(.+?)\s*$/);
+
+    if (!match) {
+      continue;
+    }
+
+    const [, rawKey, rawValue] = match;
+    const value = rawValue.trim();
+
+    if (!value) {
+      continue;
+    }
+
+    values.set(normalizeLookupKey(rawKey), value);
+  }
+
+  return values;
+}
+
+function normalizeLookupKey(value: string): string {
+  return value.replace(/[^a-zA-Z0-9]+/g, "").toLowerCase();
+}
+
+function looksLikeEmailField(key: string): boolean {
+  return normalizeLookupKey(key).includes("email");
+}
+
+function findEmail(content: string): string | null {
+  const match = content.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  return match?.[0] ?? null;
+}
+
+function parseNumberValue(value: string | null | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+
+  return findFirstNumber(value);
+}
+
+function findFirstNumber(content: string): number | null {
+  const match = content.match(/(?:^|[^\w])(?:\$|usd\s*)?(-?\d+(?:[.,]\d+)?)(?!\w)/i);
+
+  if (!match) {
+    return null;
+  }
+
+  const normalized = match[1].replace(/,/g, "");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getCurrentUsagePeriod(): string {
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  const month = String(now.getUTCMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
 }

@@ -162,6 +162,20 @@ export async function getJob(jobId: string): Promise<JobRecord | null> {
   return (result.Item as JobRecord | undefined) ?? null;
 }
 
+export async function getJobResult(jobId: string): Promise<JobResultRecord | null> {
+  const result = await dynamo.send(
+    new GetCommand({
+      TableName: getTableName(),
+      Key: {
+        PK: jobPk(jobId),
+        SK: "RESULT"
+      }
+    })
+  );
+
+  return (result.Item as JobResultRecord | undefined) ?? null;
+}
+
 export async function saveJobResult(
   jobId: string,
   result: JsonValue
