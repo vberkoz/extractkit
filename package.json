@@ -10,6 +10,7 @@
     "build:frontend": "node ./scripts/build-frontend.mjs",
     "build:backend": "node ./scripts/build-backend.mjs",
     "build": "npm run build:frontend && npm run build:backend",
+    "create:api-key": "node ./scripts/run-create-api-key.mjs",
     "deploy": "./scripts/deploy.sh"
   },
   "devDependencies": {

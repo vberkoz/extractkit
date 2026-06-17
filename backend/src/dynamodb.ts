@@ -20,7 +20,11 @@ type JsonValue =
 export type ApiKeyItem = DynamoRecord & {
   PK: string;
   SK: "METADATA";
+  apiKeyId: string;
   apiKeyHash: string;
+  userId: string;
+  plan: string;
+  disabled?: boolean;
 };
 
 export type JobRecord = DynamoRecord & {

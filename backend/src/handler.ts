@@ -3,6 +3,8 @@ import type {
   APIGatewayProxyResultV2,
   Handler
 } from "aws-lambda";
+import { createHash } from "node:crypto";
+import { getApiKey } from "./dynamodb";
 
 type JsonValue =
   | null
@@ -23,6 +25,12 @@ type ErrorBody = {
     message: string;
     code: string;
   };
+};
+
+type AuthContext = {
+  userId: string;
+  apiKeyId: string;
+  plan: string;
 };
 
 class HttpError extends Error {
@@ -47,6 +55,7 @@ export const handler: Handler<
   try {
     const method = event.requestContext.http.method.toUpperCase();
     const path = normalizePath(event.rawPath);
+    const auth = isPublicRoute(method, path) ? null : await authenticateRequest(event);
 
     if (method === "GET" && path === "/v1/health") {
       return ok({
@@ -57,19 +66,19 @@ export const handler: Handler<
     }
 
     if (method === "POST" && path === "/v1/extract") {
-      return await handleExtract(event);
+      return await handleExtract(event, auth!);
     }
 
     if (method === "POST" && path === "/v1/extract-url") {
-      return await handleExtractUrl(event);
+      return await handleExtractUrl(event, auth!);
     }
 
     if (method === "POST" && path === "/v1/extract-pdf") {
-      return await handleExtractPdf(event);
+      return await handleExtractPdf(event, auth!);
     }
 
     if (method === "GET" && path.startsWith("/v1/jobs/")) {
-      return await handleGetJob(event);
+      return await handleGetJob(event, auth!);
     }
 
     if (method === "GET" && path === "/v1/usage") {
@@ -87,8 +96,10 @@ export const handler: Handler<
 };
 
 async function handleExtract(
-  event: APIGatewayProxyEventV2
+  event: APIGatewayProxyEventV2,
+  auth: AuthContext
 ): Promise<APIGatewayProxyResultV2> {
+  void auth;
   const body = parseJsonBody(event);
 
   return ok({
@@ -99,8 +110,10 @@ async function handleExtract(
 }
 
 async function handleExtractUrl(
-  event: APIGatewayProxyEventV2
+  event: APIGatewayProxyEventV2,
+  auth: AuthContext
 ): Promise<APIGatewayProxyResultV2> {
+  void auth;
   const body = parseJsonBody(event);
   const url = getRequiredString(body, "url");
 
@@ -112,8 +125,10 @@ async function handleExtractUrl(
 }
 
 async function handleExtractPdf(
-  event: APIGatewayProxyEventV2
+  event: APIGatewayProxyEventV2,
+  auth: AuthContext
 ): Promise<APIGatewayProxyResultV2> {
+  void auth;
   const body = parseJsonBody(event);
 
   if (!hasNonEmptyString(body, "contentBase64") && !hasNonEmptyString(body, "url")) {
@@ -132,8 +147,10 @@ async function handleExtractPdf(
 }
 
 async function handleGetJob(
-  event: APIGatewayProxyEventV2
+  event: APIGatewayProxyEventV2,
+  auth: AuthContext
 ): Promise<APIGatewayProxyResultV2> {
+  void auth;
   const path = normalizePath(event.rawPath);
   const prefix = "/v1/jobs/";
   const jobId = path.slice(prefix.length);
@@ -146,6 +163,33 @@ async function handleGetJob(
     jobId,
     status: "completed"
   });
+}
+
+async function authenticateRequest(event: APIGatewayProxyEventV2): Promise<AuthContext> {
+  const authorization = event.headers.authorization ?? event.headers.Authorization;
+
+  if (!authorization) {
+    throw new HttpError(401, "UNAUTHORIZED", "Missing Authorization header.");
+  }
+
+  const [scheme, token] = authorization.split(" ", 2);
+
+  if (scheme !== "Bearer" || !token) {
+    throw new HttpError(401, "UNAUTHORIZED", "Authorization header must use Bearer auth.");
+  }
+
+  const apiKeyHash = createHash("sha256").update(token).digest("hex");
+  const apiKey = await getApiKey(apiKeyHash);
+
+  if (!apiKey || apiKey.disabled) {
+    throw new HttpError(401, "UNAUTHORIZED", "Invalid API key.");
+  }
+
+  return {
+    userId: apiKey.userId,
+    apiKeyId: apiKey.apiKeyId,
+    plan: apiKey.plan
+  };
 }
 
 function ok(data: JsonValue): APIGatewayProxyResultV2 {
@@ -184,6 +228,10 @@ function handleError(cause: unknown): APIGatewayProxyResultV2 {
 
   console.error("Unhandled error", cause);
   return error(500, "INTERNAL_ERROR", "Internal server error.");
+}
+
+function isPublicRoute(method: string, path: string): boolean {
+  return method === "GET" && path === "/v1/health";
 }
 
 function parseJsonBody(event: APIGatewayProxyEventV2): Record<string, JsonValue> {
