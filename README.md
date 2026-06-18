@@ -34,7 +34,8 @@ This repo is intentionally small and mostly centered around one backend Lambda h
 
 - `POST /v1/extract` is the most complete route in the repo
 - extraction is still mock logic based on `key: value` text parsing, plus light fallback detection for emails, numbers, booleans, URLs, and dates
-- `POST /v1/extract-url` and `POST /v1/extract-pdf` are placeholders
+- `POST /v1/extract-url` fetches HTML, strips noisy tags, converts the page to rough readable text, and runs the same extraction engine as `POST /v1/extract`
+- `POST /v1/extract-pdf` is still a placeholder
 - `GET /v1/usage` currently returns a fixed placeholder response even though usage is incremented in DynamoDB
 - `GET /v1/jobs/{jobId}` reads the stored job metadata and saved extraction result
 
@@ -199,7 +200,7 @@ Routes:
 
 - `GET /v1/health`: basic service health
 - `POST /v1/extract`: mock text extraction route backed by DynamoDB job storage
-- `POST /v1/extract-url`: placeholder URL extraction route
+- `POST /v1/extract-url`: fetches a URL, cleans the HTML into readable text, and stores the extraction job and result
 - `POST /v1/extract-pdf`: placeholder PDF extraction route
 - `GET /v1/jobs/{jobId}`: returns the stored job metadata and extraction result for the authenticated user
 - `GET /v1/usage`: returns a minimal usage summary
@@ -251,6 +252,43 @@ Example response:
 }
 ```
 
+Example `POST /v1/extract-url` request:
+
+```json
+{
+  "url": "https://example.com",
+  "schema": {
+    "title": "string",
+    "website": "url",
+    "description": "string"
+  },
+  "options": {
+    "mode": "sync",
+    "debug": true
+  }
+}
+```
+
+Example response:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "jobId": "url_...",
+    "data": {
+      "title": "Example Domain",
+      "website": "https://example.com/",
+      "description": null
+    },
+    "confidence": 0.5,
+    "usage": {
+      "units": 1
+    }
+  }
+}
+```
+
 Current mock extraction behavior:
 
 - reads keys from the provided `schema`
@@ -264,6 +302,17 @@ Current mock extraction behavior:
 - keeps missing fields as `null`, but returns field-level validation errors when present values fail coercion or type checks and `options.debug` is enabled
 - stores the job and result in DynamoDB
 - increments monthly usage by 1 unit
+
+Additional `POST /v1/extract-url` behavior:
+
+- uses built-in `fetch` with a 10 second timeout
+- rejects fetched responses larger than 1,000,000 bytes
+- strips `script`, `style`, `nav`, `footer`, and `svg` before text cleanup
+- converts the remaining HTML to rough readable text with simple regex/manual cleanup
+- adds lightweight HTML-aware fallbacks for URL extraction only
+- uses `<title>` for fields like `title` or `headline`
+- uses the source request URL for `url` fields like `website`, `url`, or `link`
+- uses `<meta name="description">` for fields like `description`, `summary`, or `excerpt`
 
 ## Test the deployment
 
@@ -365,13 +414,13 @@ Protected POST route with a valid key should succeed:
 curl -i "$BASE_URL/v1/extract-url" \
   -H "Authorization: Bearer $KEY" \
   -H "Content-Type: application/json" \
-  -d '{"url":"https://example.com"}'
+  -d '{"url":"https://example.com","schema":{"title":"string","website":"url"},"options":{"mode":"sync","debug":true}}'
 ```
 
 Expected response shape:
 
 ```json
-{"ok":true,"data":{"mode":"url","url":"https://example.com","jobId":"url_..."}}
+{"ok":true,"data":{"jobId":"url_...","data":{"title":"Example Domain","website":"https://example.com/"},"confidence":0.5,"usage":{"units":1}}}
 ```
 
 Authenticated route examples:
@@ -405,7 +454,7 @@ Expected response details:
 curl -i -X POST "$BASE_URL/v1/extract-url" \
   -H "content-type: application/json" \
   -H "$AUTH_HEADER" \
-  -d '{"url":"https://example.com"}'
+  -d '{"url":"https://example.com","schema":{"title":"string","website":"url","description":"string"},"options":{"mode":"sync","debug":true}}'
 ```
 
 ```bash

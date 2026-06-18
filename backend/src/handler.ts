@@ -75,6 +75,17 @@ type ExtractRequest = {
   };
 };
 
+type ExtractUrlRequest = {
+  url: string;
+  extractRequest: ExtractRequest;
+};
+
+type HtmlExtractionHints = {
+  title: string | null;
+  metaDescription: string | null;
+  sourceUrl: string;
+};
+
 type ExtractResponse = {
   jobId: string;
   data: Record<string, ExtractedValue>;
@@ -100,6 +111,10 @@ class HttpError extends Error {
 const JSON_HEADERS = {
   "content-type": "application/json"
 };
+
+const FETCH_TIMEOUT_MS = 10_000;
+const MAX_FETCH_BYTES = 1_000_000;
+const FETCH_USER_AGENT = "ExtractKit/0.1 (+https://example.com)";
 
 export const handler: Handler<
   APIGatewayProxyEventV2,
@@ -154,55 +169,37 @@ async function handleExtract(
 ): Promise<APIGatewayProxyResultV2> {
   const body = parseJsonBody(event);
   const request = parseExtractRequest(body);
-  const jobId = createJobId("extract");
-  const createdAt = new Date().toISOString();
-  const rawData = extractData(request.content, request.schema);
-  const { data, fields } = coerceAndValidateExtractedData(rawData, request.schema);
-
-  if (hasFieldErrors(fields)) {
-    throw new HttpError(
-      422,
-      "EXTRACTION_VALIDATION_FAILED",
-      "Extracted data did not match the requested schema.",
-      request.options?.debug ? fields : undefined
-    );
-  }
-
-  const response: ExtractResponse = {
-    jobId,
-    data,
-    confidence: 0.5,
-    usage: {
-      units: 1
-    }
-  };
-
-  await createJob({
-    jobId,
-    userId: auth.userId,
-    createdAt,
-    apiKeyId: auth.apiKeyId,
-    status: "completed",
-    request: body
+  return executeExtraction({
+    auth,
+    jobPrefix: "extract",
+    request,
+    requestBody: body
   });
-  await saveJobResult(jobId, response);
-  await incrementUsage(auth.userId, getCurrentUsagePeriod(), response.usage.units);
-
-  return ok(response);
 }
 
 async function handleExtractUrl(
   event: APIGatewayProxyEventV2,
   auth: AuthContext
 ): Promise<APIGatewayProxyResultV2> {
-  void auth;
   const body = parseJsonBody(event);
-  const url = getRequiredString(body, "url");
+  const request = parseExtractUrlRequest(body);
+  const html = await fetchUrlHtml(request.url);
+  const content = htmlToReadableText(html);
+  const hints = extractHtmlHints(html, request.url);
 
-  return ok({
-    mode: "url",
-    url,
-    jobId: createJobId("url")
+  if (content === "") {
+    throw new HttpError(422, "EMPTY_CONTENT", "Fetched URL did not contain readable text.");
+  }
+
+  return executeExtraction({
+    auth,
+    jobPrefix: "url",
+    request: {
+      ...request.extractRequest,
+      content
+    },
+    requestBody: body,
+    htmlHints: hints
   });
 }
 
@@ -372,7 +369,6 @@ function getRequiredString(body: Record<string, JsonValue>, key: string): string
 function parseExtractRequest(body: Record<string, JsonValue>): ExtractRequest {
   const debugEnabled = getDebugMode(body);
   const contentValue = body.content;
-  const schemaValue = body.schema;
 
   if (typeof contentValue !== "string" || contentValue.trim() === "") {
     throw withOptionalFieldErrors(
@@ -386,7 +382,58 @@ function parseExtractRequest(body: Record<string, JsonValue>): ExtractRequest {
     );
   }
 
-  const content = contentValue;
+  return {
+    content: contentValue,
+    ...parseExtractConfig(body, debugEnabled)
+  };
+}
+
+function parseExtractUrlRequest(body: Record<string, JsonValue>): ExtractUrlRequest {
+  const debugEnabled = getDebugMode(body);
+  const url = getRequiredString(body, "url");
+
+  let parsedUrl: URL;
+
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    throw withOptionalFieldErrors(
+      400,
+      "INVALID_REQUEST",
+      "Request body is invalid.",
+      debugEnabled,
+      {
+        url: ["URL must be a valid absolute URL."]
+      }
+    );
+  }
+
+  if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+    throw withOptionalFieldErrors(
+      400,
+      "INVALID_REQUEST",
+      "Request body is invalid.",
+      debugEnabled,
+      {
+        url: ["URL protocol must be http or https."]
+      }
+    );
+  }
+
+  return {
+    url: parsedUrl.toString(),
+    extractRequest: {
+      content: "",
+      ...parseExtractConfig(body, debugEnabled)
+    }
+  };
+}
+
+function parseExtractConfig(
+  body: Record<string, JsonValue>,
+  debugEnabled: boolean
+): Omit<ExtractRequest, "content"> {
+  const schemaValue = body.schema;
 
   if (!isRecord(schemaValue) || Object.keys(schemaValue).length === 0) {
     throw withOptionalFieldErrors(
@@ -470,7 +517,6 @@ function parseExtractRequest(body: Record<string, JsonValue>): ExtractRequest {
   }
 
   return {
-    content,
     schema,
     options:
       mode !== undefined || optionsValue?.debug !== undefined
@@ -514,6 +560,316 @@ function normalizePath(path: string): string {
 
 function createJobId(prefix: string): string {
   return `${prefix}_${randomUUID()}`;
+}
+
+async function executeExtraction(input: {
+  auth: AuthContext;
+  jobPrefix: string;
+  request: ExtractRequest;
+  requestBody: Record<string, JsonValue>;
+  htmlHints?: HtmlExtractionHints;
+}): Promise<APIGatewayProxyResultV2> {
+  const jobId = createJobId(input.jobPrefix);
+  const createdAt = new Date().toISOString();
+  const rawData = input.htmlHints
+    ? extractDataWithHtmlHints(input.request.content, input.request.schema, input.htmlHints)
+    : extractData(input.request.content, input.request.schema);
+  const { data, fields } = coerceAndValidateExtractedData(rawData, input.request.schema);
+
+  if (hasFieldErrors(fields)) {
+    throw new HttpError(
+      422,
+      "EXTRACTION_VALIDATION_FAILED",
+      "Extracted data did not match the requested schema.",
+      input.request.options?.debug ? fields : undefined
+    );
+  }
+
+  const response: ExtractResponse = {
+    jobId,
+    data,
+    confidence: 0.5,
+    usage: {
+      units: 1
+    }
+  };
+
+  await createJob({
+    jobId,
+    userId: input.auth.userId,
+    createdAt,
+    apiKeyId: input.auth.apiKeyId,
+    status: "completed",
+    request: input.requestBody
+  });
+  await saveJobResult(jobId, response);
+  await incrementUsage(input.auth.userId, getCurrentUsagePeriod(), response.usage.units);
+
+  return ok(response);
+}
+
+async function fetchUrlHtml(url: string): Promise<string> {
+  const abortController = new AbortController();
+  const timeout = setTimeout(() => {
+    abortController.abort();
+  }, FETCH_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        accept: "text/html,application/xhtml+xml",
+        "user-agent": FETCH_USER_AGENT
+      },
+      redirect: "follow",
+      signal: abortController.signal
+    });
+
+    if (!response.ok) {
+      throw new HttpError(
+        502,
+        "UPSTREAM_FETCH_FAILED",
+        `Failed to fetch URL content. Upstream responded with ${response.status}.`
+      );
+    }
+
+    const html = await readResponseTextWithLimit(response, MAX_FETCH_BYTES);
+
+    if (html.trim() === "") {
+      throw new HttpError(422, "EMPTY_CONTENT", "Fetched URL did not contain readable HTML.");
+    }
+
+    return html;
+  } catch (error) {
+    if (error instanceof HttpError) {
+      throw error;
+    }
+
+    if (isAbortError(error)) {
+      throw new HttpError(504, "FETCH_TIMEOUT", "Fetching the URL timed out.");
+    }
+
+    throw new HttpError(502, "UPSTREAM_FETCH_FAILED", "Failed to fetch URL content.");
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function readResponseTextWithLimit(response: Response, maxBytes: number): Promise<string> {
+  const contentLengthHeader = response.headers.get("content-length");
+  const declaredLength = contentLengthHeader ? Number(contentLengthHeader) : Number.NaN;
+
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    throw new HttpError(
+      413,
+      "FETCH_RESPONSE_TOO_LARGE",
+      `Fetched URL content exceeded the ${maxBytes} byte limit.`
+    );
+  }
+
+  if (!response.body) {
+    const text = await response.text();
+
+    if (Buffer.byteLength(text, "utf8") > maxBytes) {
+      throw new HttpError(
+        413,
+        "FETCH_RESPONSE_TOO_LARGE",
+        `Fetched URL content exceeded the ${maxBytes} byte limit.`
+      );
+    }
+
+    return text;
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let totalBytes = 0;
+  let text = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+
+    if (done) {
+      break;
+    }
+
+    totalBytes += value.byteLength;
+
+    if (totalBytes > maxBytes) {
+      throw new HttpError(
+        413,
+        "FETCH_RESPONSE_TOO_LARGE",
+        `Fetched URL content exceeded the ${maxBytes} byte limit.`
+      );
+    }
+
+    text += decoder.decode(value, { stream: true });
+  }
+
+  text += decoder.decode();
+  return text;
+}
+
+function htmlToReadableText(html: string): string {
+  const withoutIgnoredTags = stripHtmlTags(html, ["script", "style", "nav", "footer", "svg"]);
+  const withBlockBreaks = withoutIgnoredTags
+    .replace(/<(?:br|hr)\s*\/?>/gi, "\n")
+    .replace(/<\/(?:p|div|section|article|main|aside|header|li|ul|ol|h[1-6]|table|tr)>/gi, "\n");
+  const withoutTags = withBlockBreaks.replace(/<[^>]+>/g, " ");
+  const decoded = decodeBasicHtmlEntities(withoutTags);
+
+  return decoded
+    .replace(/\r/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function extractHtmlHints(html: string, sourceUrl: string): HtmlExtractionHints {
+  return {
+    title: extractTagText(html, "title"),
+    metaDescription: extractMetaContent(html, "description"),
+    sourceUrl
+  };
+}
+
+function stripHtmlTags(html: string, tagNames: string[]): string {
+  let result = html;
+
+  for (const tagName of tagNames) {
+    const pairPattern = new RegExp(
+      `<${tagName}\\b[^>]*>[\\s\\S]*?<\\/${tagName}>`,
+      "gi"
+    );
+    const selfClosingPattern = new RegExp(`<${tagName}\\b[^>]*\\/?>`, "gi");
+
+    result = result.replace(pairPattern, " ");
+    result = result.replace(selfClosingPattern, " ");
+  }
+
+  return result;
+}
+
+function decodeBasicHtmlEntities(value: string): string {
+  return value
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, "\"")
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCharCode(parseInt(code, 16)));
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
+function extractDataWithHtmlHints(
+  content: string,
+  schema: Record<string, ExtractSchemaType>,
+  hints: HtmlExtractionHints
+): Record<string, RawExtractedField> {
+  const rawData = extractData(content, schema);
+
+  for (const [field, type] of Object.entries(schema)) {
+    if (rawData[field]?.present) {
+      continue;
+    }
+
+    const hintedValue = findHtmlHintValue(field, type, hints);
+
+    if (hintedValue === null) {
+      continue;
+    }
+
+    rawData[field] = {
+      present: true,
+      value: hintedValue
+    };
+  }
+
+  return rawData;
+}
+
+function findHtmlHintValue(
+  field: string,
+  type: ExtractSchemaType,
+  hints: HtmlExtractionHints
+): string | null {
+  const normalizedField = normalizeLookupKey(field);
+
+  if (type === "url" && looksLikeWebsiteField(normalizedField)) {
+    return hints.sourceUrl;
+  }
+
+  if (type === "string" && looksLikeTitleField(normalizedField) && hints.title) {
+    return hints.title;
+  }
+
+  if (type === "string" && looksLikeDescriptionField(normalizedField) && hints.metaDescription) {
+    return hints.metaDescription;
+  }
+
+  return null;
+}
+
+function extractTagText(html: string, tagName: string): string | null {
+  const pattern = new RegExp(`<${tagName}\\b[^>]*>([\\s\\S]*?)<\\/${tagName}>`, "i");
+  const match = html.match(pattern);
+
+  if (!match) {
+    return null;
+  }
+
+  const text = decodeBasicHtmlEntities(match[1].replace(/<[^>]+>/g, " "))
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return text === "" ? null : text;
+}
+
+function extractMetaContent(html: string, metaName: string): string | null {
+  const metaTagPattern = /<meta\b[^>]*>/gi;
+  const metaTags = html.match(metaTagPattern) ?? [];
+
+  for (const tag of metaTags) {
+    const nameValue = readHtmlAttribute(tag, "name") ?? readHtmlAttribute(tag, "property");
+
+    if (!nameValue || nameValue.trim().toLowerCase() !== metaName.toLowerCase()) {
+      continue;
+    }
+
+    const contentValue = readHtmlAttribute(tag, "content");
+
+    if (!contentValue) {
+      continue;
+    }
+
+    const normalized = decodeBasicHtmlEntities(contentValue).replace(/\s+/g, " ").trim();
+
+    if (normalized !== "") {
+      return normalized;
+    }
+  }
+
+  return null;
+}
+
+function readHtmlAttribute(tag: string, attributeName: string): string | null {
+  const pattern = new RegExp(
+    `${attributeName}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'=<>` + "`" + `]+))`,
+    "i"
+  );
+  const match = tag.match(pattern);
+
+  if (!match) {
+    return null;
+  }
+
+  return match[1] ?? match[2] ?? match[3] ?? null;
 }
 
 function extractData(
@@ -603,6 +959,18 @@ function normalizeLookupKey(value: string): string {
 
 function looksLikeEmailField(key: string): boolean {
   return normalizeLookupKey(key).includes("email");
+}
+
+function looksLikeTitleField(key: string): boolean {
+  return key === "title" || key.endsWith("title") || key.includes("headline");
+}
+
+function looksLikeWebsiteField(key: string): boolean {
+  return key.includes("website") || key === "url" || key.endsWith("url") || key.includes("link");
+}
+
+function looksLikeDescriptionField(key: string): boolean {
+  return key.includes("description") || key.includes("summary") || key.includes("excerpt");
 }
 
 function findEmail(content: string): string | null {
