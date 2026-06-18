@@ -1,10 +1,7 @@
-const DEFAULT_BASE_URL =
-  "https://acum3ewi3r5xkcyjuehtgnryy40upocf.lambda-url.us-east-1.on.aws";
-const DEFAULT_API_KEY =
-  "ek_live_541b52ba75561b5f18f5b8ff39379ca589e35586921bc230";
+import { getApiKey, getBaseUrl } from "./lib/runtime-config.mjs";
 
-const baseUrl = process.env.EXTRACTKIT_BASE_URL ?? DEFAULT_BASE_URL;
-const apiKey = process.env.EXTRACTKIT_API_KEY ?? DEFAULT_API_KEY;
+const baseUrl = getBaseUrl();
+const apiKey = getApiKey();
 
 const response = await fetch(new URL("/v1/usage", baseUrl), {
   method: "GET",

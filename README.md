@@ -24,14 +24,17 @@ This repo is intentionally small and mostly centered around one backend Lambda h
 - `backend/src/dynamodb.ts`: DynamoDB access helpers for API keys, jobs, results, and usage
 - `frontend/src/index.ts`: minimal frontend entrypoint that writes a timestamp into the page
 - `frontend/index.html` and `frontend/styles.css`: static site assets copied to `dist/frontend`
-- `infra/template.yaml`: CloudFormation for the DynamoDB table, public S3 website bucket, Lambda, and Function URL
+- `infra/cloudformation.yaml`: production CloudFormation for CloudFront, custom domains, Route53, HTTP API, Lambda, DynamoDB, and S3 buckets
+- `infra/template.yaml`: older minimal CloudFormation for the DynamoDB table, S3 website bucket, Lambda, and Function URL
 - `scripts/build-frontend.mjs`: bundles frontend TypeScript to `dist/frontend/app.js`
 - `scripts/build-backend.mjs`: bundles Lambda code to `dist/backend/index.js`
 - `scripts/deploy.sh`: builds both packages, uploads the Lambda zip to S3, deploys CloudFormation, then syncs frontend assets to S3
+- `scripts/lib/runtime-config.mjs`: resolves the API base URL from env vars or stack outputs for live scripts
 - `scripts/create-api-key.ts`: seeds a dev user and API key into DynamoDB and prints the raw key once
-- `scripts/test-extract-pdf.mjs`: sends a live `POST /v1/extract-pdf` request to the deployed Lambda URL using bearer auth
+- `scripts/test-extract-pdf.mjs`: sends a live `POST /v1/extract-pdf` request to the deployed API using bearer auth
 - `scripts/test-get-job.mjs`: sends a live `POST /v1/extract-pdf` request, then fetches the created job with `GET /v1/jobs/{jobId}`
-- `scripts/test-usage.mjs`: sends a live `GET /v1/usage` request to the deployed Lambda URL using bearer auth
+- `scripts/test-live-smoke.mjs`: runs `health`, `usage`, queued PDF creation, and job retrieval in one live smoke pass
+- `scripts/test-usage.mjs`: sends a live `GET /v1/usage` request to the deployed API using bearer auth
 
 ## Current state
 
@@ -53,9 +56,11 @@ This repo is intentionally small and mostly centered around one backend Lambda h
 
 The deployed stack includes:
 
-- a static frontend in S3 website hosting
-- a Lambda Function URL backend
+- a private frontend S3 bucket behind CloudFront
+- a custom frontend domain in Route53
+- an HTTP API Gateway backend with a custom API domain
 - a DynamoDB table used for API keys, jobs, results, and usage
+- a private S3 bucket for uploaded files and results
 
 ## Data model
 
@@ -87,10 +92,21 @@ npm run build
 
 The deploy flow uses `aws-cli` only and expects valid AWS credentials.
 By default, [`scripts/deploy.sh`](/Users/basilsergius/projects/extractkit/scripts/deploy.sh) uses the AWS CLI profile `basil`.
+By default it deploys [`infra/cloudformation.yaml`](/Users/basilsergius/projects/extractkit/infra/cloudformation.yaml).
 
 ```bash
-AWS_REGION=us-east-1 npm run deploy
+HOSTED_ZONE_ID=Z1234567890 \
+FRONTEND_CERTIFICATE_ARN=arn:aws:acm:us-east-1:123456789012:certificate/frontend-cert-id \
+API_CERTIFICATE_ARN=arn:aws:acm:us-east-1:123456789012:certificate/api-cert-id \
+AWS_REGION=us-east-1 \
+npm run deploy
 ```
+
+Required environment variables for the production template:
+
+- `HOSTED_ZONE_ID`
+- `FRONTEND_CERTIFICATE_ARN`
+- `API_CERTIFICATE_ARN`
 
 Optional environment variables:
 
@@ -99,11 +115,25 @@ Optional environment variables:
 - `PROJECT_NAME`
 - `ARTIFACT_BUCKET`
 - `AWS_REGION`
+- `DOMAIN_NAME`
+- `API_DOMAIN_NAME`
+- `TEMPLATE_FILE`
 
 Example override:
 
 ```bash
-AWS_PROFILE=other-profile AWS_REGION=us-east-1 npm run deploy
+AWS_PROFILE=other-profile \
+HOSTED_ZONE_ID=Z1234567890 \
+FRONTEND_CERTIFICATE_ARN=arn:aws:acm:us-east-1:123456789012:certificate/frontend-cert-id \
+API_CERTIFICATE_ARN=arn:aws:acm:us-east-1:123456789012:certificate/api-cert-id \
+AWS_REGION=us-east-1 \
+npm run deploy
+```
+
+If you need to deploy the older minimal stack instead, point the script back to the legacy template:
+
+```bash
+TEMPLATE_FILE=./infra/template.yaml AWS_REGION=us-east-1 npm run deploy
 ```
 
 ## Stack outputs
@@ -111,9 +141,16 @@ AWS_PROFILE=other-profile AWS_REGION=us-east-1 npm run deploy
 The CloudFormation stack publishes:
 
 - `ExtractKitTableName`: DynamoDB table name used by the backend
-- `FrontendWebsiteUrl`: S3 website URL for the frontend
 - `FrontendBucketName`: S3 bucket receiving synced frontend assets
-- `BackendFunctionUrl`: Lambda Function URL for the backend
+- `FrontendDistributionId`: CloudFront distribution ID for the frontend
+- `FrontendDistributionDomainName`: CloudFront hostname for the frontend
+- `FrontendUrl`: custom frontend URL
+- `FilesBucketName`: S3 bucket for uploaded files and results
+- `BackendFunctionName`: deployed Lambda function name
+- `HttpApiId`: API Gateway HTTP API ID
+- `ApiUrl`: custom domain URL for the backend API
+
+The legacy template publishes `FrontendWebsiteUrl` and `BackendFunctionUrl` instead of `FrontendUrl` and `ApiUrl`.
 
 ## Verify deploy
 
@@ -171,6 +208,12 @@ Run the live job retrieval smoke test:
 
 ```bash
 npm run test:get-job
+```
+
+Run the all-in-one live smoke test:
+
+```bash
+npm run test:live-smoke
 ```
 
 Run the live usage smoke test:
@@ -398,7 +441,7 @@ Get the frontend URL:
 aws --profile=basil cloudformation describe-stacks \
   --stack-name extractkit \
   --region us-east-1 \
-  --query "Stacks[0].Outputs[?OutputKey=='FrontendWebsiteUrl'].OutputValue" \
+  --query "Stacks[0].Outputs[?OutputKey=='FrontendUrl'].OutputValue | [0]" \
   --output text
 ```
 
@@ -410,7 +453,7 @@ Get the backend URL:
 aws --profile=basil cloudformation describe-stacks \
   --stack-name extractkit \
   --region us-east-1 \
-  --query "Stacks[0].Outputs[?OutputKey=='BackendFunctionUrl'].OutputValue" \
+  --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue | [0]" \
   --output text
 ```
 
@@ -420,9 +463,11 @@ Set the backend URL:
 BASE_URL="$(aws --profile=basil cloudformation describe-stacks \
   --stack-name extractkit \
   --region us-east-1 \
-  --query "Stacks[0].Outputs[?OutputKey=='BackendFunctionUrl'].OutputValue" \
+  --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue | [0]" \
   --output text)"
 ```
+
+If you are still on the legacy template, query `FrontendWebsiteUrl` and `BackendFunctionUrl` instead.
 
 Create a dev API key:
 
@@ -505,16 +550,32 @@ Run the live PDF placeholder test script:
 npm run test:extract-pdf
 ```
 
+Run the all-in-one live smoke test:
+
+```bash
+npm run test:live-smoke
+```
+
 Run the live usage test script:
 
 ```bash
 npm run test:usage
 ```
 
-The script defaults to the current deployed Lambda URL and bearer token, but you can override them with:
+Live scripts resolve the API base URL in this order:
+
+- `EXTRACTKIT_BASE_URL`
+- CloudFormation output `ApiUrl`
+- CloudFormation output `BackendFunctionUrl`
+- the hardcoded Lambda URL fallback
+
+You can override the defaults with:
 
 - `EXTRACTKIT_BASE_URL`
 - `EXTRACTKIT_API_KEY`
+- `STACK_NAME`
+- `AWS_PROFILE`
+- `AWS_REGION`
 
 If the deployed endpoint still returns the older placeholder usage payload, redeploy the backend before relying on the usage smoke test.
 

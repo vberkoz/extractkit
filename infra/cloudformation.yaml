@@ -1,0 +1,406 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: ExtractKit production infrastructure
+
+Parameters:
+  HostedZoneId:
+    Type: String
+    Description: Route53 hosted zone ID for vberkoz.com
+
+  FrontendCertificateArn:
+    Type: String
+    Description: ACM certificate ARN for the CloudFront frontend domain
+
+  ApiCertificateArn:
+    Type: String
+    Description: ACM certificate ARN for the API custom domain
+
+  DomainName:
+    Type: String
+    Default: extractkit.vberkoz.com
+    Description: Frontend domain name
+
+  ApiDomainName:
+    Type: String
+    Default: api.extractkit.vberkoz.com
+    Description: API domain name
+
+  ProjectName:
+    Type: String
+    Default: extractkit
+    Description: Project name prefix for named resources
+
+  CodeS3Bucket:
+    Type: String
+    Description: S3 bucket containing the Lambda deployment artifact
+
+  CodeS3Key:
+    Type: String
+    Description: S3 key for the Lambda deployment artifact
+
+Resources:
+  ExtractKitTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref ProjectName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: GSI1PK
+          AttributeType: S
+        - AttributeName: GSI1SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: GSI1PK
+              KeyType: HASH
+            - AttributeName: GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref DomainName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FrontendBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowCloudFrontRead
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub "${FrontendBucket.Arn}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${FrontendDistribution}"
+
+  FrontendOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "${ProjectName}-frontend-oac"
+        Description: Origin access control for the ExtractKit frontend bucket
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  FrontendDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub "${ProjectName} frontend"
+        Aliases:
+          - !Ref DomainName
+        DefaultRootObject: index.html
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        PriceClass: PriceClass_100
+        Origins:
+          - Id: frontend-s3-origin
+            DomainName: !GetAtt FrontendBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt FrontendOriginAccessControl.Id
+            S3OriginConfig: {}
+        DefaultCacheBehavior:
+          TargetOriginId: frontend-s3-origin
+          ViewerProtocolPolicy: redirect-to-https
+          Compress: true
+          AllowedMethods:
+            - GET
+            - HEAD
+          CachedMethods:
+            - GET
+            - HEAD
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+        ViewerCertificate:
+          AcmCertificateArn: !Ref FrontendCertificateArn
+          MinimumProtocolVersion: TLSv1.2_2021
+          SslSupportMethod: sni-only
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  FrontendAliasRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref DomainName
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt FrontendDistribution.DomainName
+        HostedZoneId: Z2FDTNDATAQYW2
+
+  FrontendAliasRecordIpv6:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref DomainName
+      Type: AAAA
+      AliasTarget:
+        DNSName: !GetAtt FrontendDistribution.DomainName
+        HostedZoneId: Z2FDTNDATAQYW2
+
+  FilesBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${ProjectName}-files-${AWS::AccountId}-${AWS::Region}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - "*"
+            AllowedMethods:
+              - GET
+              - PUT
+              - POST
+              - HEAD
+            AllowedOrigins:
+              - !Sub "https://${DomainName}"
+            ExposedHeaders:
+              - ETag
+            MaxAge: 300
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: AbortIncompleteMultipartUploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-lambda-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: !Sub "${ProjectName}-dynamodb-access"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: DynamoDbAccess
+                Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:Query
+                  - dynamodb:UpdateItem
+                  - dynamodb:TransactWriteItems
+                Resource:
+                  - !GetAtt ExtractKitTable.Arn
+                  - !Sub "${ExtractKitTable.Arn}/index/*"
+        - PolicyName: !Sub "${ProjectName}-files-access"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: FilesBucketAccess
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource: !Sub "${FilesBucket.Arn}/*"
+              - Sid: FilesBucketList
+                Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource: !GetAtt FilesBucket.Arn
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  ExtractKitFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-backend"
+      Runtime: nodejs20.x
+      Architectures:
+        - x86_64
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        S3Bucket: !Ref CodeS3Bucket
+        S3Key: !Ref CodeS3Key
+      Environment:
+        Variables:
+          EXTRACTKIT_TABLE_NAME: !Ref ExtractKitTable
+          EXTRACTKIT_FILES_BUCKET_NAME: !Ref FilesBucket
+          EXTRACTKIT_FRONTEND_URL: !Sub "https://${DomainName}"
+          EXTRACTKIT_API_BASE_URL: !Sub "https://${ApiDomainName}"
+      Timeout: 30
+      MemorySize: 512
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub "${ProjectName}-http-api"
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowCredentials: false
+        AllowHeaders:
+          - authorization
+          - content-type
+          - x-requested-with
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+        AllowOrigins:
+          - !Sub "https://${DomainName}"
+        ExposeHeaders:
+          - content-type
+        MaxAge: 300
+
+  HttpApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt ExtractKitFunction.Arn
+      PayloadFormatVersion: "2.0"
+
+  HttpApiDefaultRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "$default"
+      Target: !Sub "integrations/${HttpApiIntegration}"
+
+  HttpApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: "$default"
+      AutoDeploy: true
+
+  HttpApiInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref ExtractKitFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*/$default"
+
+  ApiDomain:
+    Type: AWS::ApiGatewayV2::DomainName
+    Properties:
+      DomainName: !Ref ApiDomainName
+      DomainNameConfigurations:
+        - CertificateArn: !Ref ApiCertificateArn
+          EndpointType: REGIONAL
+          SecurityPolicy: TLS_1_2
+
+  ApiMapping:
+    Type: AWS::ApiGatewayV2::ApiMapping
+    Properties:
+      ApiId: !Ref HttpApi
+      DomainName: !Ref ApiDomain
+      Stage: !Ref HttpApiStage
+
+  ApiAliasRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref ApiDomainName
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt ApiDomain.RegionalDomainName
+        HostedZoneId: !GetAtt ApiDomain.RegionalHostedZoneId
+
+Outputs:
+  ExtractKitTableName:
+    Description: DynamoDB table name used by the backend
+    Value: !Ref ExtractKitTable
+
+  FrontendBucketName:
+    Description: S3 bucket that stores frontend assets
+    Value: !Ref FrontendBucket
+
+  FrontendDistributionId:
+    Description: CloudFront distribution ID for the frontend
+    Value: !Ref FrontendDistribution
+
+  FrontendDistributionDomainName:
+    Description: CloudFront distribution domain name
+    Value: !GetAtt FrontendDistribution.DomainName
+
+  FrontendUrl:
+    Description: Frontend URL
+    Value: !Sub "https://${DomainName}"
+
+  FilesBucketName:
+    Description: S3 bucket for uploaded files and results
+    Value: !Ref FilesBucket
+
+  BackendFunctionName:
+    Description: Backend Lambda function name
+    Value: !Ref ExtractKitFunction
+
+  HttpApiId:
+    Description: API Gateway HTTP API ID
+    Value: !Ref HttpApi
+
+  ApiUrl:
+    Description: Custom domain URL for the API
+    Value: !Sub "https://${ApiDomainName}"
