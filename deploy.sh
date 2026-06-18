@@ -6,15 +6,15 @@ AWS_PROFILE="${AWS_PROFILE:-basil}"
 AWS_REGION="${AWS_REGION:-us-east-1}"
 STACK_NAME="${STACK_NAME:-extractkit}"
 DEPLOY_BUCKET="${DEPLOY_BUCKET:-}"
-HOSTED_ZONE_ID="${HOSTED_ZONE_ID:-}"
-FRONTEND_CERT_ARN="${FRONTEND_CERT_ARN:-}"
-API_CERT_ARN="${API_CERT_ARN:-}"
+HOSTED_ZONE_ID="${HOSTED_ZONE_ID:-Z0938756375Q47T4PTZG2}"
+FRONTEND_CERT_ARN="${FRONTEND_CERT_ARN:-arn:aws:acm:us-east-1:653268860643:certificate/6c4a63b8-02c6-4c93-9973-f20be1d132c2}"
+API_CERT_ARN="${API_CERT_ARN:-arn:aws:acm:us-east-1:653268860643:certificate/6c4a63b8-02c6-4c93-9973-f20be1d132c2}"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEMPLATE_FILE="${ROOT_DIR}/infra/cloudformation.yaml"
 PROJECT_NAME="${PROJECT_NAME:-${STACK_NAME}}"
 DOMAIN_NAME="${DOMAIN_NAME:-extractkit.vberkoz.com}"
-API_DOMAIN_NAME="${API_DOMAIN_NAME:-api.extractkit.vberkoz.com}"
+API_DOMAIN_NAME="${API_DOMAIN_NAME:-extractkit-api.vberkoz.com}"
 BACKEND_DIST_DIR="${ROOT_DIR}/dist/backend"
 FRONTEND_DIST_DIR="${ROOT_DIR}/dist/frontend"
 ZIP_PATH="${BACKEND_DIST_DIR}/function.zip"
@@ -68,10 +68,6 @@ get_stack_output() {
 }
 
 cd "${ROOT_DIR}"
-
-require_var HOSTED_ZONE_ID
-require_var FRONTEND_CERT_ARN
-require_var API_CERT_ARN
 
 ACCOUNT_ID="$(aws --profile="${AWS_PROFILE}" sts get-caller-identity --query Account --output text)"
 DEPLOY_BUCKET="${DEPLOY_BUCKET:-${STACK_NAME}-${ACCOUNT_ID}-${AWS_REGION}-deploy}"

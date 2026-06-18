@@ -33,6 +33,7 @@ This repo is intentionally small and mostly centered around one backend Lambda h
 - `scripts/lib/runtime-config.mjs`: resolves the API base URL from env vars or stack outputs for live scripts
 - `scripts/create-api-key.ts`: seeds a dev user and API key into DynamoDB and prints the raw key once
 - `scripts/test-live-extract.mjs`: sends a live `POST /v1/extract` request and validates the extracted response payload
+- `scripts/test-custom-domains.mjs`: verifies the frontend custom domain, API health route, and authenticated extract request against the deployed custom domains
 - `scripts/test-extract-pdf.mjs`: sends a live `POST /v1/extract-pdf` request to the deployed API using bearer auth
 - `scripts/test-get-job.mjs`: sends a live `POST /v1/extract-pdf` request, then fetches the created job with `GET /v1/jobs/{jobId}`
 - `scripts/test-live-smoke.mjs`: runs `health`, `usage`, queued PDF creation, and job retrieval in one live smoke pass
@@ -53,6 +54,7 @@ This repo is intentionally small and mostly centered around one backend Lambda h
 - `npm run build:backend` writes `dist/backend/index.js` and `dist/backend/index.js.map`
 - `npm run build` runs both builds
 - `npm run test:live-extract` runs a live extract endpoint smoke test
+- `npm run test:custom-domains` verifies the frontend and API custom domains end to end
 - `npm run test:extract-pdf` runs the live queued PDF job smoke test
 - `npm run test:get-job` runs a live end-to-end create-job then get-job smoke test
 - `npm run test:usage` runs a live usage endpoint smoke test
@@ -97,20 +99,12 @@ The deploy flow uses `aws-cli` only and expects valid AWS credentials.
 By default, [`deploy.sh`](/Users/basilsergius/projects/extractkit/deploy.sh) uses the AWS CLI profile `basil`.
 By default it deploys [`infra/cloudformation.yaml`](/Users/basilsergius/projects/extractkit/infra/cloudformation.yaml).
 The root script builds the backend and frontend separately with `esbuild`, uploads the Lambda zip to the deployment S3 bucket, deploys CloudFormation, syncs frontend assets to the frontend bucket, and invalidates the CloudFront distribution.
+It now hardcodes the `vberkoz.com` hosted zone, uses a wildcard `*.vberkoz.com` ACM certificate by default for both frontend and API, and defaults the API domain to `extractkit-api.vberkoz.com` so the wildcard certificate covers both hostnames.
 
 ```bash
-HOSTED_ZONE_ID=Z1234567890 \
-FRONTEND_CERT_ARN=arn:aws:acm:us-east-1:123456789012:certificate/frontend-cert-id \
-API_CERT_ARN=arn:aws:acm:us-east-1:123456789012:certificate/api-cert-id \
 AWS_REGION=us-east-1 \
 npm run deploy
 ```
-
-Required environment variables for the production template:
-
-- `HOSTED_ZONE_ID`
-- `FRONTEND_CERT_ARN`
-- `API_CERT_ARN`
 
 Optional environment variables:
 
@@ -121,14 +115,16 @@ Optional environment variables:
 - `PROJECT_NAME`
 - `DOMAIN_NAME`
 - `API_DOMAIN_NAME`
+- `HOSTED_ZONE_ID`
+- `FRONTEND_CERT_ARN`
+- `API_CERT_ARN`
 
 Example override:
 
 ```bash
 AWS_PROFILE=other-profile \
-HOSTED_ZONE_ID=Z1234567890 \
-FRONTEND_CERT_ARN=arn:aws:acm:us-east-1:123456789012:certificate/frontend-cert-id \
-API_CERT_ARN=arn:aws:acm:us-east-1:123456789012:certificate/api-cert-id \
+DOMAIN_NAME=extractkit.vberkoz.com \
+API_DOMAIN_NAME=extractkit-api.vberkoz.com \
 DEPLOY_BUCKET=extractkit-artifacts-example \
 AWS_REGION=us-east-1 \
 npm run deploy
@@ -206,6 +202,12 @@ Run the live extract smoke test:
 
 ```bash
 npm run test:live-extract
+```
+
+Run the custom-domain smoke test:
+
+```bash
+npm run test:custom-domains
 ```
 
 Run the live job retrieval smoke test:
@@ -439,7 +441,14 @@ Current `POST /v1/extract-pdf` behavior:
 
 ## Test the deployment
 
-Get the frontend URL:
+Current production custom domains:
+
+```bash
+FRONTEND_URL="https://extractkit.vberkoz.com"
+API_URL="https://extractkit-api.vberkoz.com"
+```
+
+Get the frontend URL from CloudFormation:
 
 ```bash
 aws --profile=basil cloudformation describe-stacks \
@@ -451,7 +460,7 @@ aws --profile=basil cloudformation describe-stacks \
 
 Open that URL in a browser. The page should load and the status card should show that the frontend bundle loaded.
 
-Get the backend URL:
+Get the backend URL from CloudFormation:
 
 ```bash
 aws --profile=basil cloudformation describe-stacks \
@@ -560,6 +569,12 @@ Run the live extract test script:
 npm run test:live-extract
 ```
 
+Run the custom-domain smoke test script:
+
+```bash
+npm run test:custom-domains
+```
+
 Run the all-in-one live smoke test:
 
 ```bash
@@ -582,6 +597,8 @@ Live scripts resolve the API base URL in this order:
 You can override the defaults with:
 
 - `EXTRACTKIT_BASE_URL`
+- `EXTRACTKIT_FRONTEND_URL`
+- `EXTRACTKIT_API_URL`
 - `EXTRACTKIT_API_KEY`
 - `STACK_NAME`
 - `AWS_PROFILE`
