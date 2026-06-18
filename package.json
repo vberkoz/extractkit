@@ -13,6 +13,7 @@
     "create:api-key": "node ./scripts/run-create-api-key.mjs",
     "test:get-job": "node ./scripts/test-get-job.mjs",
     "test:extract-pdf": "node ./scripts/test-extract-pdf.mjs",
+    "test:usage": "node ./scripts/test-usage.mjs",
     "deploy": "./scripts/deploy.sh"
   },
   "devDependencies": {

@@ -56,6 +56,16 @@ export type UserJobItem = DynamoRecord & {
   status?: JobStatus;
 };
 
+export type UsageRecord = DynamoRecord & {
+  PK: string;
+  SK: string;
+  entityType: "USAGE";
+  userId: string;
+  yyyyMM: string;
+  amount?: number;
+  updatedAt: string;
+};
+
 const dynamo = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
   marshallOptions: {
     removeUndefinedValues: true
@@ -109,6 +119,20 @@ export async function incrementUsage(
   );
 
   return Number(result.Attributes?.amount ?? 0);
+}
+
+export async function getUsage(userId: string, yyyyMM: string): Promise<UsageRecord | null> {
+  const result = await dynamo.send(
+    new GetCommand({
+      TableName: getTableName(),
+      Key: {
+        PK: userPk(userId),
+        SK: usageSk(yyyyMM)
+      }
+    })
+  );
+
+  return (result.Item as UsageRecord | undefined) ?? null;
 }
 
 export async function createJob(job: CreateJobInput): Promise<void> {

@@ -9,6 +9,7 @@ import {
   getApiKey,
   getJob,
   getJobResult,
+  getUsage,
   incrementUsage,
   type JobStatus,
   saveJobResult
@@ -111,6 +112,13 @@ type GetJobResponse = {
   result: JsonValue;
 };
 
+type UsageResponse = {
+  month: string;
+  used: number;
+  limit: number;
+  plan: string;
+};
+
 class HttpError extends Error {
   statusCode: number;
   code: string;
@@ -166,11 +174,7 @@ export const handler: Handler<
     }
 
     if (method === "GET" && path === "/v1/usage") {
-      return ok({
-        period: "current",
-        requests: 0,
-        jobs: 0
-      });
+      return await handleGetUsage(auth!);
     }
 
     throw new HttpError(404, "NOT_FOUND", `Route not found: ${method} ${path}`);
@@ -271,6 +275,19 @@ async function handleGetJob(
     status: normalizeJobStatus(job.status, jobResult !== null),
     createdAt: job.createdAt,
     result: jobResult?.result ?? null
+  };
+
+  return ok(response);
+}
+
+async function handleGetUsage(auth: AuthContext): Promise<APIGatewayProxyResultV2> {
+  const month = getCurrentUsagePeriod();
+  const usage = await getUsage(auth.userId, month);
+  const response: UsageResponse = {
+    month,
+    used: Number(usage?.amount ?? 0),
+    limit: getPlanUsageLimit(auth.plan),
+    plan: auth.plan
   };
 
   return ok(response);
@@ -1357,4 +1374,15 @@ function getCurrentUsagePeriod(): string {
   const year = now.getUTCFullYear();
   const month = String(now.getUTCMonth() + 1).padStart(2, "0");
   return `${year}-${month}`;
+}
+
+function getPlanUsageLimit(plan: string): number {
+  const normalizedPlan = plan.trim().toLowerCase();
+
+  switch (normalizedPlan) {
+    case "dev":
+      return 10_000;
+    default:
+      return 10_000;
+  }
 }

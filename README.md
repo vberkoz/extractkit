@@ -31,6 +31,7 @@ This repo is intentionally small and mostly centered around one backend Lambda h
 - `scripts/create-api-key.ts`: seeds a dev user and API key into DynamoDB and prints the raw key once
 - `scripts/test-extract-pdf.mjs`: sends a live `POST /v1/extract-pdf` request to the deployed Lambda URL using bearer auth
 - `scripts/test-get-job.mjs`: sends a live `POST /v1/extract-pdf` request, then fetches the created job with `GET /v1/jobs/{jobId}`
+- `scripts/test-usage.mjs`: sends a live `GET /v1/usage` request to the deployed Lambda URL using bearer auth
 
 ## Current state
 
@@ -38,7 +39,7 @@ This repo is intentionally small and mostly centered around one backend Lambda h
 - extraction is still mock logic based on `key: value` text parsing, plus light fallback detection for emails, numbers, booleans, URLs, and dates
 - `POST /v1/extract-url` fetches HTML, strips noisy tags, converts the page to rough readable text, and runs the same extraction engine as `POST /v1/extract`
 - `POST /v1/extract-pdf` is an async placeholder that validates `pdfUrl` and `schema`, stores a queued job, and returns a `jobId`
-- `GET /v1/usage` currently returns a fixed placeholder response even though usage is incremented in DynamoDB
+- `GET /v1/usage` returns the authenticated user's current-month usage from DynamoDB
 - `GET /v1/jobs/{jobId}` reads the stored job metadata, including job status, and any saved extraction result
 
 ## Build outputs
@@ -48,6 +49,7 @@ This repo is intentionally small and mostly centered around one backend Lambda h
 - `npm run build` runs both builds
 - `npm run test:extract-pdf` runs the live queued PDF job smoke test
 - `npm run test:get-job` runs a live end-to-end create-job then get-job smoke test
+- `npm run test:usage` runs a live usage endpoint smoke test
 
 The deployed stack includes:
 
@@ -69,7 +71,7 @@ Item patterns:
 
 - API key: `PK=APIKEY#{apiKeyHash}`, `SK=METADATA`
 - User: `PK=USER#{userId}`, `SK=METADATA`
-- Usage by month: `PK=USER#{userId}`, `SK=USAGE#{yyyyMM}`
+- Usage by month: `PK=USER#{userId}`, `SK=USAGE#{yyyy-MM}`
 - Job: `PK=JOB#{jobId}`, `SK=METADATA`
 - User jobs: `PK=USER#{userId}`, `SK=JOB#{createdAt}#{jobId}`
 - Extraction result: `PK=JOB#{jobId}`, `SK=RESULT`
@@ -171,6 +173,12 @@ Run the live job retrieval smoke test:
 npm run test:get-job
 ```
 
+Run the live usage smoke test:
+
+```bash
+npm run test:usage
+```
+
 ## API
 
 Response envelope for successful requests:
@@ -213,7 +221,7 @@ Routes:
 - `POST /v1/extract-url`: fetches a URL, cleans the HTML into readable text, and stores the extraction job and result
 - `POST /v1/extract-pdf`: validates `pdfUrl` and `schema`, then creates a queued PDF extraction job
 - `GET /v1/jobs/{jobId}`: returns the stored job metadata and extraction result for the authenticated user only
-- `GET /v1/usage`: returns a minimal usage summary
+- `GET /v1/usage`: returns the current month usage summary for the authenticated user
 
 Example `GET /v1/jobs/{jobId}` response:
 
@@ -473,7 +481,7 @@ curl -i "$BASE_URL/v1/usage" \
 Expected response shape:
 
 ```json
-{"ok":true,"data":{"period":"current","requests":0,"jobs":0}}
+{"ok":true,"data":{"month":"2026-06","used":0,"limit":10000,"plan":"dev"}}
 ```
 
 Protected POST route with a valid key should succeed:
@@ -497,10 +505,18 @@ Run the live PDF placeholder test script:
 npm run test:extract-pdf
 ```
 
+Run the live usage test script:
+
+```bash
+npm run test:usage
+```
+
 The script defaults to the current deployed Lambda URL and bearer token, but you can override them with:
 
 - `EXTRACTKIT_BASE_URL`
 - `EXTRACTKIT_API_KEY`
+
+If the deployed endpoint still returns the older placeholder usage payload, redeploy the backend before relying on the usage smoke test.
 
 Authenticated route examples:
 
