@@ -16,7 +16,7 @@ This repo is intentionally small and mostly centered around one backend Lambda h
 - the backend is a single Lambda entrypoint at `backend/src/handler.ts`
 - the backend persists API keys, jobs, results, and usage in one DynamoDB table
 - there is no local app server or test runner in the repo right now
-- builds are done with `esbuild`, and deployment is driven by `scripts/deploy.sh`
+- builds are done with `esbuild`, and deployment is driven by `deploy.sh`
 
 ## Repo map
 
@@ -28,9 +28,11 @@ This repo is intentionally small and mostly centered around one backend Lambda h
 - `infra/template.yaml`: older minimal CloudFormation for the DynamoDB table, S3 website bucket, Lambda, and Function URL
 - `scripts/build-frontend.mjs`: bundles frontend TypeScript to `dist/frontend/app.js`
 - `scripts/build-backend.mjs`: bundles Lambda code to `dist/backend/index.js`
-- `scripts/deploy.sh`: builds both packages, uploads the Lambda zip to S3, deploys CloudFormation, then syncs frontend assets to S3
+- `deploy.sh`: installs dependencies if needed, builds both packages, uploads the Lambda zip to S3, deploys CloudFormation, syncs frontend assets to S3, and invalidates CloudFront
+- `scripts/deploy.sh`: compatibility wrapper that forwards to the root deploy script
 - `scripts/lib/runtime-config.mjs`: resolves the API base URL from env vars or stack outputs for live scripts
 - `scripts/create-api-key.ts`: seeds a dev user and API key into DynamoDB and prints the raw key once
+- `scripts/test-live-extract.mjs`: sends a live `POST /v1/extract` request and validates the extracted response payload
 - `scripts/test-extract-pdf.mjs`: sends a live `POST /v1/extract-pdf` request to the deployed API using bearer auth
 - `scripts/test-get-job.mjs`: sends a live `POST /v1/extract-pdf` request, then fetches the created job with `GET /v1/jobs/{jobId}`
 - `scripts/test-live-smoke.mjs`: runs `health`, `usage`, queued PDF creation, and job retrieval in one live smoke pass
@@ -50,6 +52,7 @@ This repo is intentionally small and mostly centered around one backend Lambda h
 - `npm run build:frontend` writes `dist/frontend/app.js`, `dist/frontend/index.html`, and `dist/frontend/styles.css`
 - `npm run build:backend` writes `dist/backend/index.js` and `dist/backend/index.js.map`
 - `npm run build` runs both builds
+- `npm run test:live-extract` runs a live extract endpoint smoke test
 - `npm run test:extract-pdf` runs the live queued PDF job smoke test
 - `npm run test:get-job` runs a live end-to-end create-job then get-job smoke test
 - `npm run test:usage` runs a live usage endpoint smoke test
@@ -91,13 +94,14 @@ npm run build
 ## Deploy
 
 The deploy flow uses `aws-cli` only and expects valid AWS credentials.
-By default, [`scripts/deploy.sh`](/Users/basilsergius/projects/extractkit/scripts/deploy.sh) uses the AWS CLI profile `basil`.
+By default, [`deploy.sh`](/Users/basilsergius/projects/extractkit/deploy.sh) uses the AWS CLI profile `basil`.
 By default it deploys [`infra/cloudformation.yaml`](/Users/basilsergius/projects/extractkit/infra/cloudformation.yaml).
+The root script builds the backend and frontend separately with `esbuild`, uploads the Lambda zip to the deployment S3 bucket, deploys CloudFormation, syncs frontend assets to the frontend bucket, and invalidates the CloudFront distribution.
 
 ```bash
 HOSTED_ZONE_ID=Z1234567890 \
-FRONTEND_CERTIFICATE_ARN=arn:aws:acm:us-east-1:123456789012:certificate/frontend-cert-id \
-API_CERTIFICATE_ARN=arn:aws:acm:us-east-1:123456789012:certificate/api-cert-id \
+FRONTEND_CERT_ARN=arn:aws:acm:us-east-1:123456789012:certificate/frontend-cert-id \
+API_CERT_ARN=arn:aws:acm:us-east-1:123456789012:certificate/api-cert-id \
 AWS_REGION=us-east-1 \
 npm run deploy
 ```
@@ -105,35 +109,29 @@ npm run deploy
 Required environment variables for the production template:
 
 - `HOSTED_ZONE_ID`
-- `FRONTEND_CERTIFICATE_ARN`
-- `API_CERTIFICATE_ARN`
+- `FRONTEND_CERT_ARN`
+- `API_CERT_ARN`
 
 Optional environment variables:
 
 - `AWS_PROFILE`
 - `STACK_NAME`
-- `PROJECT_NAME`
-- `ARTIFACT_BUCKET`
+- `DEPLOY_BUCKET`
 - `AWS_REGION`
+- `PROJECT_NAME`
 - `DOMAIN_NAME`
 - `API_DOMAIN_NAME`
-- `TEMPLATE_FILE`
 
 Example override:
 
 ```bash
 AWS_PROFILE=other-profile \
 HOSTED_ZONE_ID=Z1234567890 \
-FRONTEND_CERTIFICATE_ARN=arn:aws:acm:us-east-1:123456789012:certificate/frontend-cert-id \
-API_CERTIFICATE_ARN=arn:aws:acm:us-east-1:123456789012:certificate/api-cert-id \
+FRONTEND_CERT_ARN=arn:aws:acm:us-east-1:123456789012:certificate/frontend-cert-id \
+API_CERT_ARN=arn:aws:acm:us-east-1:123456789012:certificate/api-cert-id \
+DEPLOY_BUCKET=extractkit-artifacts-example \
 AWS_REGION=us-east-1 \
 npm run deploy
-```
-
-If you need to deploy the older minimal stack instead, point the script back to the legacy template:
-
-```bash
-TEMPLATE_FILE=./infra/template.yaml AWS_REGION=us-east-1 npm run deploy
 ```
 
 ## Stack outputs
@@ -157,7 +155,7 @@ The legacy template publishes `FrontendWebsiteUrl` and `BackendFunctionUrl` inst
 Redeploy the stack:
 
 ```bash
-./scripts/deploy.sh
+./deploy.sh
 ```
 
 List stack outputs:
@@ -202,6 +200,12 @@ aws --profile basil dynamodb describe-table \
   --table-name extractkit \
   --region us-east-1 \
   --query "Table.[TableName,TableStatus,BillingModeSummary.BillingMode]"
+```
+
+Run the live extract smoke test:
+
+```bash
+npm run test:live-extract
 ```
 
 Run the live job retrieval smoke test:
@@ -548,6 +552,12 @@ Run the live PDF placeholder test script:
 
 ```bash
 npm run test:extract-pdf
+```
+
+Run the live extract test script:
+
+```bash
+npm run test:live-extract
 ```
 
 Run the all-in-one live smoke test:
