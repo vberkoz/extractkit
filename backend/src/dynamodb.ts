@@ -27,13 +27,15 @@ export type ApiKeyItem = DynamoRecord & {
   disabled?: boolean;
 };
 
+export type JobStatus = "completed" | "queued" | "failed";
+
 export type JobRecord = DynamoRecord & {
   PK: string;
   SK: "METADATA";
   jobId: string;
   userId: string;
   createdAt: string;
-  status?: string;
+  status?: JobStatus;
 };
 
 export type JobResultRecord = DynamoRecord & {
@@ -51,6 +53,7 @@ export type UserJobItem = DynamoRecord & {
   jobId: string;
   userId: string;
   createdAt: string;
+  status?: JobStatus;
 };
 
 const dynamo = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
@@ -220,7 +223,7 @@ export type CreateJobInput = DynamoRecord & {
   jobId: string;
   userId: string;
   createdAt: string;
-  status?: string;
+  status?: JobStatus;
 };
 
 function getTableName(): string {

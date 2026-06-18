@@ -29,21 +29,25 @@ This repo is intentionally small and mostly centered around one backend Lambda h
 - `scripts/build-backend.mjs`: bundles Lambda code to `dist/backend/index.js`
 - `scripts/deploy.sh`: builds both packages, uploads the Lambda zip to S3, deploys CloudFormation, then syncs frontend assets to S3
 - `scripts/create-api-key.ts`: seeds a dev user and API key into DynamoDB and prints the raw key once
+- `scripts/test-extract-pdf.mjs`: sends a live `POST /v1/extract-pdf` request to the deployed Lambda URL using bearer auth
+- `scripts/test-get-job.mjs`: sends a live `POST /v1/extract-pdf` request, then fetches the created job with `GET /v1/jobs/{jobId}`
 
 ## Current state
 
 - `POST /v1/extract` is the most complete route in the repo
 - extraction is still mock logic based on `key: value` text parsing, plus light fallback detection for emails, numbers, booleans, URLs, and dates
 - `POST /v1/extract-url` fetches HTML, strips noisy tags, converts the page to rough readable text, and runs the same extraction engine as `POST /v1/extract`
-- `POST /v1/extract-pdf` is still a placeholder
+- `POST /v1/extract-pdf` is an async placeholder that validates `pdfUrl` and `schema`, stores a queued job, and returns a `jobId`
 - `GET /v1/usage` currently returns a fixed placeholder response even though usage is incremented in DynamoDB
-- `GET /v1/jobs/{jobId}` reads the stored job metadata and saved extraction result
+- `GET /v1/jobs/{jobId}` reads the stored job metadata, including job status, and any saved extraction result
 
 ## Build outputs
 
 - `npm run build:frontend` writes `dist/frontend/app.js`, `dist/frontend/index.html`, and `dist/frontend/styles.css`
 - `npm run build:backend` writes `dist/backend/index.js` and `dist/backend/index.js.map`
 - `npm run build` runs both builds
+- `npm run test:extract-pdf` runs the live queued PDF job smoke test
+- `npm run test:get-job` runs a live end-to-end create-job then get-job smoke test
 
 The deployed stack includes:
 
@@ -161,6 +165,12 @@ aws --profile basil dynamodb describe-table \
   --query "Table.[TableName,TableStatus,BillingModeSummary.BillingMode]"
 ```
 
+Run the live job retrieval smoke test:
+
+```bash
+npm run test:get-job
+```
+
 ## API
 
 Response envelope for successful requests:
@@ -201,9 +211,34 @@ Routes:
 - `GET /v1/health`: basic service health
 - `POST /v1/extract`: mock text extraction route backed by DynamoDB job storage
 - `POST /v1/extract-url`: fetches a URL, cleans the HTML into readable text, and stores the extraction job and result
-- `POST /v1/extract-pdf`: placeholder PDF extraction route
-- `GET /v1/jobs/{jobId}`: returns the stored job metadata and extraction result for the authenticated user
+- `POST /v1/extract-pdf`: validates `pdfUrl` and `schema`, then creates a queued PDF extraction job
+- `GET /v1/jobs/{jobId}`: returns the stored job metadata and extraction result for the authenticated user only
 - `GET /v1/usage`: returns a minimal usage summary
+
+Example `GET /v1/jobs/{jobId}` response:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "jobId": "pdf_...",
+    "status": "completed",
+    "createdAt": "2026-06-18T10:09:59.947Z",
+    "result": {
+      "jobId": "extract_...",
+      "data": {
+        "invoiceNumber": "INV-123"
+      },
+      "confidence": 0.5,
+      "usage": {
+        "units": 1
+      }
+    }
+  }
+}
+```
+
+The `status` value is one of `completed`, `queued`, or `failed`. Non-owner users receive `404`.
 
 Example `POST /v1/extract` request:
 
@@ -289,6 +324,31 @@ Example response:
 }
 ```
 
+Example `POST /v1/extract-pdf` request:
+
+```json
+{
+  "pdfUrl": "https://example.com/file.pdf",
+  "schema": {
+    "invoiceNumber": "string",
+    "totalAmount": "number",
+    "vendorEmail": "email"
+  }
+}
+```
+
+Example response:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "jobId": "pdf_...",
+    "status": "queued"
+  }
+}
+```
+
 Current mock extraction behavior:
 
 - reads keys from the provided `schema`
@@ -313,6 +373,14 @@ Additional `POST /v1/extract-url` behavior:
 - uses `<title>` for fields like `title` or `headline`
 - uses the source request URL for `url` fields like `website`, `url`, or `link`
 - uses `<meta name="description">` for fields like `description`, `summary`, or `excerpt`
+
+Current `POST /v1/extract-pdf` behavior:
+
+- validates `pdfUrl` as an absolute `http` or `https` URL
+- validates the provided `schema` using the same supported schema types as `POST /v1/extract`
+- creates a DynamoDB job with status `queued`
+- does not parse the PDF yet
+- returns the queued job ID immediately
 
 ## Test the deployment
 
@@ -423,6 +491,17 @@ Expected response shape:
 {"ok":true,"data":{"jobId":"url_...","data":{"title":"Example Domain","website":"https://example.com/"},"confidence":0.5,"usage":{"units":1}}}
 ```
 
+Run the live PDF placeholder test script:
+
+```bash
+npm run test:extract-pdf
+```
+
+The script defaults to the current deployed Lambda URL and bearer token, but you can override them with:
+
+- `EXTRACTKIT_BASE_URL`
+- `EXTRACTKIT_API_KEY`
+
 Authenticated route examples:
 
 ```bash
@@ -461,7 +540,7 @@ curl -i -X POST "$BASE_URL/v1/extract-url" \
 curl -i -X POST "$BASE_URL/v1/extract-pdf" \
   -H "content-type: application/json" \
   -H "$AUTH_HEADER" \
-  -d '{"url":"https://example.com/file.pdf"}'
+  -d '{"pdfUrl":"https://example.com/file.pdf","schema":{"invoiceNumber":"string","totalAmount":"number","vendorEmail":"email"}}'
 ```
 
 ```bash
@@ -475,6 +554,8 @@ After a successful extract request, use the returned job ID here:
 curl -i "$BASE_URL/v1/jobs/extract_replace_me" \
   -H "$AUTH_HEADER"
 ```
+
+For a queued PDF job, the response should include `status: "queued"` and `result: null` until processing is implemented.
 
 ```bash
 curl -i "$BASE_URL/v1/usage" \

@@ -10,6 +10,7 @@ import {
   getJob,
   getJobResult,
   incrementUsage,
+  type JobStatus,
   saveJobResult
 } from "./dynamodb";
 
@@ -101,6 +102,13 @@ type ExtractResponse = {
   usage: {
     units: number;
   };
+};
+
+type GetJobResponse = {
+  jobId: string;
+  status: JobStatus;
+  createdAt: string;
+  result: JsonValue;
 };
 
 class HttpError extends Error {
@@ -258,13 +266,14 @@ async function handleGetJob(
   }
 
   const jobResult = await getJobResult(jobId);
-
-  return ok({
+  const response: GetJobResponse = {
     jobId,
-    status: typeof job.status === "string" ? job.status : "completed",
+    status: normalizeJobStatus(job.status, jobResult !== null),
     createdAt: job.createdAt,
     result: jobResult?.result ?? null
-  });
+  };
+
+  return ok(response);
 }
 
 async function authenticateRequest(event: APIGatewayProxyEventV2): Promise<AuthContext> {
@@ -624,6 +633,14 @@ function normalizePath(path: string): string {
 
 function createJobId(prefix: string): string {
   return `${prefix}_${randomUUID()}`;
+}
+
+function normalizeJobStatus(status: string | undefined, hasResult: boolean): JobStatus {
+  if (status === "completed" || status === "queued" || status === "failed") {
+    return status;
+  }
+
+  return hasResult ? "completed" : "queued";
 }
 
 async function executeExtraction(input: {
