@@ -33,6 +33,7 @@ export type JobRecord = DynamoRecord & {
   jobId: string;
   userId: string;
   createdAt: string;
+  status?: string;
 };
 
 export type JobResultRecord = DynamoRecord & {

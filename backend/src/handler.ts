@@ -80,6 +80,14 @@ type ExtractUrlRequest = {
   extractRequest: ExtractRequest;
 };
 
+type ExtractPdfRequest = {
+  pdfUrl: string;
+  schema: Record<string, ExtractSchemaType>;
+  options?: {
+    debug?: boolean;
+  };
+};
+
 type HtmlExtractionHints = {
   title: string | null;
   metaDescription: string | null;
@@ -207,21 +215,27 @@ async function handleExtractPdf(
   event: APIGatewayProxyEventV2,
   auth: AuthContext
 ): Promise<APIGatewayProxyResultV2> {
-  void auth;
   const body = parseJsonBody(event);
+  const request = parseExtractPdfRequest(body);
+  const jobId = createJobId("pdf");
+  const createdAt = new Date().toISOString();
 
-  if (!hasNonEmptyString(body, "contentBase64") && !hasNonEmptyString(body, "url")) {
-    throw new HttpError(
-      400,
-      "INVALID_REQUEST",
-      "Request body must include either 'contentBase64' or 'url'."
-    );
-  }
+  await createJob({
+    jobId,
+    userId: auth.userId,
+    createdAt,
+    apiKeyId: auth.apiKeyId,
+    status: "queued",
+    request: {
+      pdfUrl: request.pdfUrl,
+      schema: request.schema,
+      ...(request.options ? { options: request.options } : {})
+    }
+  });
 
   return ok({
-    mode: "pdf",
-    source: hasNonEmptyString(body, "url") ? "url" : "contentBase64",
-    jobId: createJobId("pdf")
+    jobId,
+    status: "queued"
   });
 }
 
@@ -247,7 +261,7 @@ async function handleGetJob(
 
   return ok({
     jobId,
-    status: "completed",
+    status: typeof job.status === "string" ? job.status : "completed",
     createdAt: job.createdAt,
     result: jobResult?.result ?? null
   });
@@ -429,6 +443,62 @@ function parseExtractUrlRequest(body: Record<string, JsonValue>): ExtractUrlRequ
   };
 }
 
+function parseExtractPdfRequest(body: Record<string, JsonValue>): ExtractPdfRequest {
+  const debugEnabled = getDebugMode(body);
+  const pdfUrl = getRequiredString(body, "pdfUrl");
+
+  let parsedUrl: URL;
+
+  try {
+    parsedUrl = new URL(pdfUrl);
+  } catch {
+    throw withOptionalFieldErrors(
+      400,
+      "INVALID_REQUEST",
+      "Request body is invalid.",
+      debugEnabled,
+      {
+        pdfUrl: ["pdfUrl must be a valid absolute URL."]
+      }
+    );
+  }
+
+  if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+    throw withOptionalFieldErrors(
+      400,
+      "INVALID_REQUEST",
+      "Request body is invalid.",
+      debugEnabled,
+      {
+        pdfUrl: ["pdfUrl protocol must be http or https."]
+      }
+    );
+  }
+
+  const extractConfig = parseExtractConfig(body, debugEnabled);
+
+  if (extractConfig.options?.mode !== undefined) {
+    throw withOptionalFieldErrors(
+      400,
+      "INVALID_REQUEST",
+      "Request options are invalid.",
+      debugEnabled,
+      {
+        "options.mode": ["Mode is not supported for PDF extraction jobs."]
+      }
+    );
+  }
+
+  return {
+    pdfUrl: parsedUrl.toString(),
+    schema: extractConfig.schema,
+    options:
+      extractConfig.options?.debug !== undefined
+        ? { debug: extractConfig.options.debug }
+        : undefined
+  };
+}
+
 function parseExtractConfig(
   body: Record<string, JsonValue>,
   debugEnabled: boolean
@@ -527,12 +597,6 @@ function parseExtractConfig(
         : undefined
   };
 }
-
-function hasNonEmptyString(body: Record<string, JsonValue>, key: string): boolean {
-  const value = body[key];
-  return typeof value === "string" && value.trim() !== "";
-}
-
 function isRecord(value: unknown): value is Record<string, JsonValue> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
