@@ -31,6 +31,7 @@ type ErrorBody = {
   error: {
     message: string;
     code: string;
+    fields?: Record<string, string[]>;
   };
 };
 
@@ -40,19 +41,43 @@ type AuthContext = {
   plan: string;
 };
 
-type ExtractSchemaType = "string" | "number";
+type ExtractSchemaType =
+  | "string"
+  | "number"
+  | "boolean"
+  | "date"
+  | "email"
+  | "url"
+  | "array:string"
+  | "array:number";
+
+type FieldErrors = Record<string, string[]>;
+
+type ExtractedValue =
+  | string
+  | number
+  | boolean
+  | string[]
+  | number[]
+  | null;
+
+type RawExtractedField = {
+  present: boolean;
+  value: string | null;
+};
 
 type ExtractRequest = {
   content: string;
   schema: Record<string, ExtractSchemaType>;
   options?: {
     mode?: string;
+    debug?: boolean;
   };
 };
 
 type ExtractResponse = {
   jobId: string;
-  data: Record<string, string | number | null>;
+  data: Record<string, ExtractedValue>;
   confidence: number;
   usage: {
     units: number;
@@ -62,11 +87,13 @@ type ExtractResponse = {
 class HttpError extends Error {
   statusCode: number;
   code: string;
+  fields?: FieldErrors;
 
-  constructor(statusCode: number, code: string, message: string) {
+  constructor(statusCode: number, code: string, message: string, fields?: FieldErrors) {
     super(message);
     this.statusCode = statusCode;
     this.code = code;
+    this.fields = fields;
   }
 }
 
@@ -129,7 +156,18 @@ async function handleExtract(
   const request = parseExtractRequest(body);
   const jobId = createJobId("extract");
   const createdAt = new Date().toISOString();
-  const data = extractData(request.content, request.schema);
+  const rawData = extractData(request.content, request.schema);
+  const { data, fields } = coerceAndValidateExtractedData(rawData, request.schema);
+
+  if (hasFieldErrors(fields)) {
+    throw new HttpError(
+      422,
+      "EXTRACTION_VALIDATION_FAILED",
+      "Extracted data did not match the requested schema.",
+      request.options?.debug ? fields : undefined
+    );
+  }
+
   const response: ExtractResponse = {
     jobId,
     data,
@@ -258,12 +296,18 @@ function ok(data: JsonValue): APIGatewayProxyResultV2 {
   };
 }
 
-function error(statusCode: number, code: string, message: string): APIGatewayProxyResultV2 {
+function error(
+  statusCode: number,
+  code: string,
+  message: string,
+  fields?: FieldErrors
+): APIGatewayProxyResultV2 {
   const body: ErrorBody = {
     ok: false,
     error: {
       message,
-      code
+      code,
+      ...(fields ? { fields } : {})
     }
   };
 
@@ -276,7 +320,7 @@ function error(statusCode: number, code: string, message: string): APIGatewayPro
 
 function handleError(cause: unknown): APIGatewayProxyResultV2 {
   if (cause instanceof HttpError) {
-    return error(cause.statusCode, cause.code, cause.message);
+    return error(cause.statusCode, cause.code, cause.message, cause.fields);
   }
 
   console.error("Unhandled error", cause);
@@ -326,51 +370,115 @@ function getRequiredString(body: Record<string, JsonValue>, key: string): string
 }
 
 function parseExtractRequest(body: Record<string, JsonValue>): ExtractRequest {
-  const content = getRequiredString(body, "content");
+  const debugEnabled = getDebugMode(body);
+  const contentValue = body.content;
   const schemaValue = body.schema;
 
-  if (!isRecord(schemaValue) || Object.keys(schemaValue).length === 0) {
-    throw new HttpError(
+  if (typeof contentValue !== "string" || contentValue.trim() === "") {
+    throw withOptionalFieldErrors(
       400,
       "INVALID_REQUEST",
-      "Request body field 'schema' must be a non-empty object."
+      "Request body is invalid.",
+      debugEnabled,
+      {
+        content: ["Content must be a non-empty string."]
+      }
+    );
+  }
+
+  const content = contentValue;
+
+  if (!isRecord(schemaValue) || Object.keys(schemaValue).length === 0) {
+    throw withOptionalFieldErrors(
+      400,
+      "INVALID_REQUEST",
+      "Request body field 'schema' must be a non-empty object.",
+      debugEnabled,
+      {
+        schema: ["Schema must be a non-empty object."]
+      }
     );
   }
 
   const schema: Record<string, ExtractSchemaType> = {};
+  const schemaErrors: FieldErrors = {};
 
   for (const [key, value] of Object.entries(schemaValue)) {
-    if (value !== "string" && value !== "number") {
-      throw new HttpError(
-        400,
-        "INVALID_REQUEST",
-        `Schema field '${key}' must be 'string' or 'number'.`
+    if (key.trim() === "") {
+      addFieldError(schemaErrors, key, "Schema field name must not be empty.");
+      continue;
+    }
+
+    if (!isSupportedSchemaType(value)) {
+      addFieldError(
+        schemaErrors,
+        key,
+        "Unsupported schema type. Expected one of: string, number, boolean, date, email, url, array:string, array:number."
       );
+      continue;
     }
 
     schema[key] = value;
   }
 
+  if (hasFieldErrors(schemaErrors)) {
+    throw withOptionalFieldErrors(
+      400,
+      "INVALID_SCHEMA",
+      "Schema contains unsupported field types.",
+      debugEnabled,
+      schemaErrors
+    );
+  }
+
   const optionsValue = body.options;
 
   if (optionsValue !== undefined && !isRecord(optionsValue)) {
-    throw new HttpError(400, "INVALID_REQUEST", "Request body field 'options' must be an object.");
+    throw withOptionalFieldErrors(
+      400,
+      "INVALID_REQUEST",
+      "Request body field 'options' must be an object.",
+      debugEnabled,
+      {
+        options: ["Options must be an object."]
+      }
+    );
   }
 
   const mode = optionsValue?.mode;
+  const optionsErrors: FieldErrors = {};
 
   if (mode !== undefined && mode !== "sync") {
-    throw new HttpError(
+    addFieldError(optionsErrors, "options.mode", "Mode must be 'sync'.");
+  }
+
+  if (
+    optionsValue?.debug !== undefined &&
+    typeof optionsValue.debug !== "boolean"
+  ) {
+    addFieldError(optionsErrors, "options.debug", "Debug must be a boolean.");
+  }
+
+  if (hasFieldErrors(optionsErrors)) {
+    throw withOptionalFieldErrors(
       400,
       "INVALID_REQUEST",
-      "Request body field 'options.mode' must be 'sync'."
+      "Request options are invalid.",
+      debugEnabled,
+      optionsErrors
     );
   }
 
   return {
     content,
     schema,
-    options: mode !== undefined ? { mode } : undefined
+    options:
+      mode !== undefined || optionsValue?.debug !== undefined
+        ? {
+            ...(mode !== undefined ? { mode } : {}),
+            ...(optionsValue?.debug !== undefined ? { debug: optionsValue.debug } : {})
+          }
+        : undefined
   };
 }
 
@@ -381,6 +489,19 @@ function hasNonEmptyString(body: Record<string, JsonValue>, key: string): boolea
 
 function isRecord(value: unknown): value is Record<string, JsonValue> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isSupportedSchemaType(value: JsonValue): value is ExtractSchemaType {
+  return (
+    value === "string" ||
+    value === "number" ||
+    value === "boolean" ||
+    value === "date" ||
+    value === "email" ||
+    value === "url" ||
+    value === "array:string" ||
+    value === "array:number"
+  );
 }
 
 function normalizePath(path: string): string {
@@ -398,30 +519,59 @@ function createJobId(prefix: string): string {
 function extractData(
   content: string,
   schema: Record<string, ExtractSchemaType>
-): Record<string, string | number | null> {
+): Record<string, RawExtractedField> {
   const lines = content.split(/\r?\n/);
-  const email = findEmail(content);
-  const firstNumber = findFirstNumber(content);
   const keyedValues = buildKeyValueMap(lines);
-  const result: Record<string, string | number | null> = {};
+  const result: Record<string, RawExtractedField> = {};
 
-  for (const [schemaKey, schemaType] of Object.entries(schema)) {
+  for (const schemaKey of Object.keys(schema)) {
     const directMatch = keyedValues.get(normalizeLookupKey(schemaKey));
 
-    if (schemaType === "number") {
-      result[schemaKey] = parseNumberValue(directMatch) ?? firstNumber;
+    if (directMatch !== undefined) {
+      result[schemaKey] = {
+        present: true,
+        value: directMatch
+      };
       continue;
     }
 
-    if (looksLikeEmailField(schemaKey)) {
-      result[schemaKey] = directMatch ?? email;
-      continue;
-    }
-
-    result[schemaKey] = directMatch ?? null;
+    const fallbackValue = findFallbackValue(content, schemaKey, schema[schemaKey]);
+    result[schemaKey] = {
+      present: fallbackValue !== null,
+      value: fallbackValue
+    };
   }
 
   return result;
+}
+
+function findFallbackValue(
+  content: string,
+  schemaKey: string,
+  schemaType: ExtractSchemaType
+): string | null {
+  if (schemaType === "email" || looksLikeEmailField(schemaKey)) {
+    return findEmail(content);
+  }
+
+  if (schemaType === "number" || schemaType === "array:number") {
+    const firstNumber = findFirstNumberMatch(content);
+    return firstNumber?.raw ?? null;
+  }
+
+  if (schemaType === "url") {
+    return findUrl(content);
+  }
+
+  if (schemaType === "boolean") {
+    return findBooleanToken(content);
+  }
+
+  if (schemaType === "date") {
+    return findDateLikeValue(content);
+  }
+
+  return null;
 }
 
 function buildKeyValueMap(lines: string[]): Map<string, string> {
@@ -460,24 +610,297 @@ function findEmail(content: string): string | null {
   return match?.[0] ?? null;
 }
 
-function parseNumberValue(value: string | null | undefined): number | null {
-  if (!value) {
-    return null;
-  }
-
-  return findFirstNumber(value);
-}
-
 function findFirstNumber(content: string): number | null {
-  const match = content.match(/(?:^|[^\w])(?:\$|usd\s*)?(-?\d+(?:[.,]\d+)?)(?!\w)/i);
+  const match = findFirstNumberMatch(content);
 
   if (!match) {
     return null;
   }
 
-  const normalized = match[1].replace(/,/g, "");
+  const parsed = parseLooseNumber(match.raw);
+  return parsed;
+}
+
+function findFirstNumberMatch(content: string): { raw: string } | null {
+  const match = content.match(
+    /(?:^|[^\w])((?:\$|usd\s*)?-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)(?!\w)/i
+  );
+
+  if (!match) {
+    return null;
+  }
+
+  return { raw: match[1] };
+}
+
+function findUrl(content: string): string | null {
+  const match = content.match(/https?:\/\/[^\s]+/i);
+  return match?.[0] ?? null;
+}
+
+function findBooleanToken(content: string): string | null {
+  const match = content.match(/\b(?:yes|no|true|false)\b/i);
+  return match?.[0] ?? null;
+}
+
+function findDateLikeValue(content: string): string | null {
+  const patterns = [
+    /\b\d{4}-\d{2}-\d{2}\b/,
+    /\b\d{1,2}\/\d{1,2}\/\d{4}\b/,
+    /\b\d{1,2}-\d{1,2}-\d{4}\b/,
+    /\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2},\s+\d{4}\b/i
+  ];
+
+  for (const pattern of patterns) {
+    const match = content.match(pattern);
+
+    if (match) {
+      return match[0];
+    }
+  }
+
+  return null;
+}
+
+function coerceAndValidateExtractedData(
+  rawData: Record<string, RawExtractedField>,
+  schema: Record<string, ExtractSchemaType>
+): {
+  data: Record<string, ExtractedValue>;
+  fields: FieldErrors;
+} {
+  const data: Record<string, ExtractedValue> = {};
+  const fields: FieldErrors = {};
+
+  for (const [field, type] of Object.entries(schema)) {
+    const rawField = rawData[field] ?? { present: false, value: null };
+    const coerced = coerceValueBySchemaType(rawField.value, type);
+    data[field] = coerced;
+
+    if (
+      rawField.present
+      && coerced === null
+      && rawField.value !== null
+      && type !== "string"
+    ) {
+      addFieldError(fields, field, getTypeValidationMessage(type));
+      continue;
+    }
+
+    if (!isValueValidForSchemaType(coerced, type)) {
+      addFieldError(fields, field, getTypeValidationMessage(type));
+    }
+  }
+
+  return { data, fields };
+}
+
+function coerceValueBySchemaType(
+  value: string | null,
+  type: ExtractSchemaType
+): ExtractedValue {
+  if (value === null) {
+    return null;
+  }
+
+  if (type === "string" || type === "email" || type === "url") {
+    return value.trim();
+  }
+
+  if (type === "number") {
+    return parseLooseNumber(value);
+  }
+
+  if (type === "boolean") {
+    return parseLooseBoolean(value);
+  }
+
+  if (type === "date") {
+    return parseLooseDate(value);
+  }
+
+  if (type === "array:string") {
+    return parseStringArray(value);
+  }
+
+  return parseNumberArray(value);
+}
+
+function isValueValidForSchemaType(value: ExtractedValue, type: ExtractSchemaType): boolean {
+  if (value === null) {
+    return true;
+  }
+
+  if (type === "string") {
+    return typeof value === "string";
+  }
+
+  if (type === "number") {
+    return typeof value === "number" && Number.isFinite(value);
+  }
+
+  if (type === "boolean") {
+    return typeof value === "boolean";
+  }
+
+  if (type === "date") {
+    return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+  }
+
+  if (type === "email") {
+    return (
+      typeof value === "string" &&
+      /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(value)
+    );
+  }
+
+  if (type === "url") {
+    if (typeof value !== "string") {
+      return false;
+    }
+
+    try {
+      const url = new URL(value);
+      return url.protocol === "http:" || url.protocol === "https:";
+    } catch {
+      return false;
+    }
+  }
+
+  if (type === "array:string") {
+    return Array.isArray(value) && value.every((item) => typeof item === "string");
+  }
+
+  return Array.isArray(value) && value.every((item) => typeof item === "number");
+}
+
+function getTypeValidationMessage(type: ExtractSchemaType): string {
+  if (type === "array:string") {
+    return "Expected an array of strings.";
+  }
+
+  if (type === "array:number") {
+    return "Expected an array of numbers.";
+  }
+
+  return `Expected a ${type}.`;
+}
+
+function parseLooseNumber(value: string): number | null {
+  const normalized = value
+    .trim()
+    .replace(/^\$/, "")
+    .replace(/^usd\s*/i, "")
+    .replace(/,/g, "");
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseLooseBoolean(value: string): boolean | null {
+  const normalized = value.trim().toLowerCase();
+
+  if (normalized === "true" || normalized === "yes") {
+    return true;
+  }
+
+  if (normalized === "false" || normalized === "no") {
+    return false;
+  }
+
+  return null;
+}
+
+function parseLooseDate(value: string): string | null {
+  const normalized = value.trim();
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    return normalized;
+  }
+
+  const parsed = new Date(normalized);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return [
+    parsed.getUTCFullYear(),
+    String(parsed.getUTCMonth() + 1).padStart(2, "0"),
+    String(parsed.getUTCDate()).padStart(2, "0")
+  ].join("-");
+}
+
+function parseStringArray(value: string): string[] | null {
+  const tokens = splitArrayLikeString(value);
+  return tokens.length > 0 ? tokens : null;
+}
+
+function parseNumberArray(value: string): number[] | null {
+  const tokens = splitArrayLikeString(value);
+
+  if (tokens.length === 0) {
+    return null;
+  }
+
+  const numbers: number[] = [];
+
+  for (const token of tokens) {
+    const parsed = parseLooseNumber(token);
+
+    if (parsed === null) {
+      return null;
+    }
+
+    numbers.push(parsed);
+  }
+
+  return numbers;
+}
+
+function splitArrayLikeString(value: string): string[] {
+  const trimmed = value.trim();
+
+  if (trimmed === "") {
+    return [];
+  }
+
+  const withoutBrackets =
+    trimmed.startsWith("[") && trimmed.endsWith("]")
+      ? trimmed.slice(1, -1)
+      : trimmed;
+
+  return withoutBrackets
+    .split(/[,\n;|]/)
+    .map((item) => item.trim())
+    .filter((item) => item !== "");
+}
+
+function addFieldError(fields: FieldErrors, field: string, message: string): void {
+  const existing = fields[field] ?? [];
+  existing.push(message);
+  fields[field] = existing;
+}
+
+function hasFieldErrors(fields: FieldErrors): boolean {
+  return Object.keys(fields).length > 0;
+}
+
+function withOptionalFieldErrors(
+  statusCode: number,
+  code: string,
+  message: string,
+  debugEnabled: boolean,
+  fields: FieldErrors
+): HttpError {
+  return new HttpError(statusCode, code, message, debugEnabled ? fields : undefined);
+}
+
+function getDebugMode(body: Record<string, JsonValue>): boolean {
+  if (!isRecord(body.options)) {
+    return false;
+  }
+
+  return body.options.debug === true;
 }
 
 function getCurrentUsagePeriod(): string {
