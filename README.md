@@ -1,115 +1,124 @@
 # ExtractKit
 
-Minimal TypeScript monorepo with:
+ExtractKit is a small TypeScript monorepo for a document and content extraction product. It includes:
 
-- `frontend/`: plain HTML, CSS, and TypeScript bundled with `esbuild`
-- `backend/`: AWS Lambda TypeScript bundled with `esbuild`
-- `infra/`: CloudFormation YAML
-- `scripts/`: local build and deployment scripts
-- `dist/`: generated output
+- a plain HTML/CSS/TypeScript frontend demo client
+- an AWS Lambda backend behind API Gateway
+- CloudFormation infrastructure for frontend hosting, API hosting, DNS, storage, and data
+- scripts for local builds, deployment, smoke tests, and API key creation
 
-## Quick context
+## Project Overview
 
-This repo is intentionally small and mostly centered around one backend Lambda handler.
+The current repo is intentionally compact and centered around one backend Lambda entrypoint.
 
-- the frontend is a minimal single-page client for text extraction, URL extraction, usage lookup, and API docs
-- the backend is a single Lambda entrypoint at `backend/src/handler.ts`
-- the backend persists API keys, jobs, results, and usage in one DynamoDB table
-- there is no local app server or test runner in the repo right now
-- builds are done with `esbuild`, and deployment is driven by `deploy.sh`
+Today it supports:
 
-## Repo map
+- `POST /v1/extract` for schema-based text extraction
+- `POST /v1/extract-url` for fetch-and-extract from a web page
+- `POST /v1/extract-pdf` as an async queued placeholder
+- `GET /v1/jobs/{jobId}` for reading stored job status and results
+- `GET /v1/usage` for current-month usage lookup
+- a frontend for trying the API without leaving the browser
 
-- `backend/src/handler.ts`: HTTP routing, auth, request parsing, mock extraction, schema validation, and API responses
-- `backend/src/dynamodb.ts`: DynamoDB access helpers for API keys, jobs, results, and usage
-- `frontend/src/index.ts`: frontend app with API key persistence, tabbed extract flows, usage lookup, and inline docs
-- `frontend/index.html` and `frontend/styles.css`: static site assets copied to `dist/frontend`
-- `infra/cloudformation.yaml`: production CloudFormation for CloudFront, custom domains, Route53, HTTP API, Lambda, DynamoDB, and S3 buckets
-- `infra/template.yaml`: older minimal CloudFormation for the DynamoDB table, S3 website bucket, Lambda, and Function URL
-- `scripts/build-frontend.mjs`: bundles frontend TypeScript to `dist/frontend/app.js`
-- `scripts/build-backend.mjs`: bundles Lambda code to `dist/backend/index.js`
-- `deploy.sh`: installs dependencies if needed, builds both packages, uploads the Lambda zip to S3, deploys CloudFormation, syncs frontend assets to S3, and invalidates CloudFront
-- `scripts/deploy.sh`: compatibility wrapper that forwards to the root deploy script
-- `scripts/lib/runtime-config.mjs`: resolves the API base URL from env vars or stack outputs for live scripts
-- `scripts/create-api-key.ts`: seeds a dev user and API key into DynamoDB and prints the raw key once
-- `scripts/test-live-extract.mjs`: sends a live `POST /v1/extract` request and validates the extracted response payload
-- `scripts/test-custom-domains.mjs`: verifies the frontend custom domain, API health route, and authenticated extract request against the deployed custom domains
-- `scripts/test-frontend-live.mjs`: verifies the deployed frontend, health route, usage route, text extraction, and URL extraction against the live custom domains
-- `scripts/test-extract-pdf.mjs`: sends a live `POST /v1/extract-pdf` request to the deployed API using bearer auth
-- `scripts/test-get-job.mjs`: sends a live `POST /v1/extract-pdf` request, then fetches the created job with `GET /v1/jobs/{jobId}`
-- `scripts/test-live-smoke.mjs`: runs `health`, `usage`, queued PDF creation, and job retrieval in one live smoke pass
-- `scripts/test-usage.mjs`: sends a live `GET /v1/usage` request to the deployed API using bearer auth
+Current implementation notes:
 
-## Current state
+- extraction logic is still mock-style and built around `key: value` parsing plus light coercion
+- PDF extraction is not implemented yet beyond queueing a job record
+- the frontend stores the API key in browser `localStorage`
+- there is no local app server in this repo right now
 
-- `POST /v1/extract` is the most complete route in the repo
-- extraction is still mock logic based on `key: value` text parsing, plus light fallback detection for emails, numbers, booleans, URLs, and dates
-- `POST /v1/extract-url` fetches HTML, strips noisy tags, converts the page to rough readable text, and runs the same extraction engine as `POST /v1/extract`
-- `POST /v1/extract-pdf` is an async placeholder that validates `pdfUrl` and `schema`, stores a queued job, and returns a `jobId`
-- `GET /v1/usage` returns the authenticated user's current-month usage from DynamoDB
-- `GET /v1/jobs/{jobId}` reads the stored job metadata, including job status, and any saved extraction result
-- the deployed frontend targets `https://extractkit-api.vberkoz.com` and stores the API key in browser `localStorage`
+## Architecture
 
-## Build outputs
+High-level architecture:
 
-- `npm run build:frontend` writes `dist/frontend/app.js`, `dist/frontend/index.html`, and `dist/frontend/styles.css`
-- `npm run build:backend` writes `dist/backend/index.js` and `dist/backend/index.js.map`
-- `npm run build` runs both builds
-- `npm run test:frontend-live` runs a live frontend and API smoke test against the deployed custom domains
-- `npm run test:live-extract` runs a live extract endpoint smoke test
-- `npm run test:custom-domains` verifies the frontend and API custom domains end to end
-- `npm run test:extract-pdf` runs the live queued PDF job smoke test
-- `npm run test:get-job` runs a live end-to-end create-job then get-job smoke test
-- `npm run test:usage` runs a live usage endpoint smoke test
+```text
+Browser frontend
+  -> CloudFront
+  -> private S3 frontend bucket
 
-The deployed stack includes:
+Browser / scripts
+  -> API Gateway HTTP API
+  -> Lambda handler
+  -> DynamoDB single table
+  -> S3 files/results bucket
 
-- a private frontend S3 bucket behind CloudFront
-- a custom frontend domain in Route53
-- an HTTP API Gateway backend with a custom API domain
-- a DynamoDB table used for API keys, jobs, results, and usage
-- a private S3 bucket for uploaded files and results
+Route53 + ACM
+  -> frontend custom domain
+  -> API custom domain
+```
 
-## Data model
+Code layout:
 
-The backend uses a single DynamoDB table named from the CloudFormation `ProjectName`
-parameter and exposed to Lambda as `EXTRACTKIT_TABLE_NAME`.
+- `frontend/`: static frontend app bundled with `esbuild`
+- `frontend/src/index.ts`: UI rendering, API calls, API key persistence, docs/examples
+- `frontend/index.html`: HTML entrypoint
+- `frontend/styles.css`: plain CSS styling
+- `backend/`: Lambda backend bundled with `esbuild`
+- `backend/src/handler.ts`: HTTP routing, auth, validation, extraction logic, responses
+- `backend/src/dynamodb.ts`: DynamoDB read/write helpers
+- `infra/cloudformation.yaml`: primary production stack
+- `infra/template.yaml`: older minimal stack
+- `scripts/`: build, deploy, smoke-test, and API key tooling
 
-Primary key:
+## Local Build
 
-- `PK` string partition key
-- `SK` string sort key
-
-Item patterns:
-
-- API key: `PK=APIKEY#{apiKeyHash}`, `SK=METADATA`
-- User: `PK=USER#{userId}`, `SK=METADATA`
-- Usage by month: `PK=USER#{userId}`, `SK=USAGE#{yyyy-MM}`
-- Job: `PK=JOB#{jobId}`, `SK=METADATA`
-- User jobs: `PK=USER#{userId}`, `SK=JOB#{createdAt}#{jobId}`
-- Extraction result: `PK=JOB#{jobId}`, `SK=RESULT`
-
-## Getting started
+Install dependencies:
 
 ```bash
 npm install
+```
+
+Build everything:
+
+```bash
 npm run build
 ```
 
-## Deploy
+Build frontend only:
 
-The deploy flow uses `aws-cli` only and expects valid AWS credentials.
-By default, [`deploy.sh`](/Users/basilsergius/projects/extractkit/deploy.sh) uses the AWS CLI profile `basil`.
-By default it deploys [`infra/cloudformation.yaml`](/Users/basilsergius/projects/extractkit/infra/cloudformation.yaml).
-The root script builds the backend and frontend separately with `esbuild`, uploads the Lambda zip to the deployment S3 bucket, deploys CloudFormation, syncs frontend assets to the frontend bucket, and invalidates the CloudFront distribution.
-It now hardcodes the `vberkoz.com` hosted zone, uses a wildcard `*.vberkoz.com` ACM certificate by default for both frontend and API, and defaults the API domain to `extractkit-api.vberkoz.com` so the wildcard certificate covers both hostnames.
+```bash
+npm run build:frontend
+```
+
+Build backend only:
+
+```bash
+npm run build:backend
+```
+
+Build outputs:
+
+- `npm run build:frontend` writes `dist/frontend/app.js`, `dist/frontend/index.html`, and `dist/frontend/styles.css`
+- `npm run build:backend` writes `dist/backend/index.js` and `dist/backend/index.js.map`
+
+## Deployment Prerequisites
+
+Before deploying, make sure you have:
+
+- Node.js and `npm`
+- `aws-cli`
+- valid AWS credentials
+- an AWS CLI profile with permission to manage CloudFormation, Lambda, API Gateway, S3, CloudFront, Route53, DynamoDB, IAM, and ACM
+- a Route53 hosted zone for your chosen domain
+- an ACM certificate that covers the frontend and API hostnames
+- a deployment S3 bucket for Lambda artifacts
+
+Default deployment behavior:
+
+- deploy script: [deploy.sh](/Users/basilsergius/projects/extractkit/deploy.sh)
+- primary template: [infra/cloudformation.yaml](/Users/basilsergius/projects/extractkit/infra/cloudformation.yaml)
+- default AWS CLI profile used by the script: `basil`
+- default AWS region shown in examples: `us-east-1`
+- current default domain assumptions in the repo: `vberkoz.com`, `extractkit.vberkoz.com`, `extractkit-api.vberkoz.com`
+
+Deploy command:
 
 ```bash
 AWS_REGION=us-east-1 \
 npm run deploy
 ```
 
-Optional environment variables:
+Useful environment variables:
 
 - `AWS_PROFILE`
 - `STACK_NAME`
@@ -133,116 +142,89 @@ AWS_REGION=us-east-1 \
 npm run deploy
 ```
 
-## Stack outputs
+## Required AWS Resources
 
-The CloudFormation stack publishes:
+The production stack provisions or expects the following AWS resources:
 
-- `ExtractKitTableName`: DynamoDB table name used by the backend
-- `FrontendBucketName`: S3 bucket receiving synced frontend assets
-- `FrontendDistributionId`: CloudFront distribution ID for the frontend
-- `FrontendDistributionDomainName`: CloudFront hostname for the frontend
-- `FrontendUrl`: custom frontend URL
-- `FilesBucketName`: S3 bucket for uploaded files and results
-- `BackendFunctionName`: deployed Lambda function name
-- `HttpApiId`: API Gateway HTTP API ID
-- `ApiUrl`: custom domain URL for the backend API
+- API Gateway HTTP API for the backend
+- Lambda function for the backend handler
+- DynamoDB table for API keys, users, jobs, results, and usage
+- private S3 bucket for frontend assets
+- CloudFront distribution in front of the frontend bucket
+- private S3 bucket for uploaded files and extraction results
+- Route53 hosted zone records for frontend and API domains
+- ACM certificates for the frontend and API custom domains
+- deployment artifact bucket used by the deploy script
+
+CloudFormation outputs published by the stack:
+
+- `ExtractKitTableName`
+- `FrontendBucketName`
+- `FrontendDistributionId`
+- `FrontendDistributionDomainName`
+- `FrontendUrl`
+- `FilesBucketName`
+- `BackendFunctionName`
+- `HttpApiId`
+- `ApiUrl`
 
 The legacy template publishes `FrontendWebsiteUrl` and `BackendFunctionUrl` instead of `FrontendUrl` and `ApiUrl`.
 
-## Verify deploy
+## DNS Setup
 
-Redeploy the stack:
+The repo’s current production setup assumes:
 
-```bash
-./deploy.sh
-```
+- frontend domain: `extractkit.vberkoz.com`
+- API domain: `extractkit-api.vberkoz.com`
+- hosted zone: `vberkoz.com`
+- wildcard certificate pattern: `*.vberkoz.com`
 
-List stack outputs:
+At a high level, DNS and certificate setup should provide:
 
-```bash
-aws --profile basil cloudformation describe-stacks \
-  --stack-name extractkit \
-  --region us-east-1 \
-  --query "Stacks[0].Outputs[].[OutputKey,OutputValue]" \
-  --output table
-```
+1. A Route53 hosted zone for the parent domain.
+2. A frontend DNS record pointing the frontend hostname to CloudFront.
+3. An API DNS record pointing the API hostname to API Gateway custom domain infrastructure.
+4. ACM certificates that cover both hostnames.
 
-Confirm the DynamoDB table resource exists in the stack:
+The deploy script and CloudFormation stack currently expect these values to exist or be passed in through environment variables. If you change domains, update:
 
-```bash
-aws --profile basil cloudformation describe-stack-resources \
-  --stack-name extractkit \
-  --region us-east-1 \
-  --query "StackResources[].[LogicalResourceId,ResourceType,PhysicalResourceId]" \
-  --output table
-```
+- `DOMAIN_NAME`
+- `API_DOMAIN_NAME`
+- `HOSTED_ZONE_ID`
+- `FRONTEND_CERT_ARN`
+- `API_CERT_ARN`
 
-Confirm Lambda received the table name env var:
+## How To Create API Key
+
+Use the included script:
 
 ```bash
-FUNCTION_NAME="$(aws --profile basil cloudformation describe-stack-resources \
-  --stack-name extractkit \
-  --region us-east-1 \
-  --query "StackResources[?LogicalResourceId=='ExtractKitFunction'].PhysicalResourceId" \
-  --output text)"
-
-aws --profile basil lambda get-function-configuration \
-  --function-name "$FUNCTION_NAME" \
-  --region us-east-1 \
-  --query "Environment.Variables"
+AWS_PROFILE=basil \
+EXTRACTKIT_TABLE_NAME=extractkit \
+AWS_REGION=us-east-1 \
+npm run create:api-key
 ```
 
-Confirm the DynamoDB table exists:
+What it does:
 
-```bash
-aws --profile basil dynamodb describe-table \
-  --table-name extractkit \
-  --region us-east-1 \
-  --query "Table.[TableName,TableStatus,BillingModeSummary.BillingMode]"
-```
+- creates a new dev user item
+- creates a new API key item
+- hashes the raw bearer token with SHA-256 before storing it
+- prints the raw `ek_live_...` key once to stdout
 
-Run the live extract smoke test:
+Relevant files:
 
-```bash
-npm run test:live-extract
-```
+- [scripts/create-api-key.ts](/Users/basilsergius/projects/extractkit/scripts/create-api-key.ts)
+- [scripts/run-create-api-key.mjs](/Users/basilsergius/projects/extractkit/scripts/run-create-api-key.mjs)
 
-Run the deployed frontend and API smoke test:
+The backend authenticates by hashing the presented bearer token and looking up:
 
-```bash
-EXTRACTKIT_FRONTEND_URL=https://extractkit.vberkoz.com \
-EXTRACTKIT_API_URL=https://extractkit-api.vberkoz.com \
-EXTRACTKIT_API_KEY='ek_live_replace_me' \
-npm run test:frontend-live
-```
+- `PK=APIKEY#{apiKeyHash}`
+- `SK=METADATA`
 
-Run the custom-domain smoke test:
+## API Examples
 
-```bash
-npm run test:custom-domains
-```
-
-Run the live job retrieval smoke test:
-
-```bash
-npm run test:get-job
-```
-
-Run the all-in-one live smoke test:
-
-```bash
-npm run test:live-smoke
-```
-
-Run the live usage smoke test:
-
-```bash
-npm run test:usage
-```
-
-## API
-
-Response envelope for successful requests:
+Response envelope for success:
 
 ```json
 {
@@ -266,48 +248,20 @@ Response envelope for errors:
 }
 ```
 
-The `error.fields` object is returned only when `options.debug` is `true` and validation has field-level details to report.
-
 Authentication:
 
 - `GET /v1/health` is public
 - every other route expects `Authorization: Bearer <token>`
-- the backend hashes the bearer token with SHA-256 and looks up `PK=APIKEY#{hash}`, `SK=METADATA`
 - missing or disabled API keys return `401 UNAUTHORIZED`
 
 Routes:
 
-- `GET /v1/health`: basic service health
-- `POST /v1/extract`: mock text extraction route backed by DynamoDB job storage
-- `POST /v1/extract-url`: fetches a URL, cleans the HTML into readable text, and stores the extraction job and result
-- `POST /v1/extract-pdf`: validates `pdfUrl` and `schema`, then creates a queued PDF extraction job
-- `GET /v1/jobs/{jobId}`: returns the stored job metadata and extraction result for the authenticated user only
-- `GET /v1/usage`: returns the current month usage summary for the authenticated user
-
-Example `GET /v1/jobs/{jobId}` response:
-
-```json
-{
-  "ok": true,
-  "data": {
-    "jobId": "pdf_...",
-    "status": "completed",
-    "createdAt": "2026-06-18T10:09:59.947Z",
-    "result": {
-      "jobId": "extract_...",
-      "data": {
-        "invoiceNumber": "INV-123"
-      },
-      "confidence": 0.5,
-      "usage": {
-        "units": 1
-      }
-    }
-  }
-}
-```
-
-The `status` value is one of `completed`, `queued`, or `failed`. Non-owner users receive `404`.
+- `GET /v1/health`
+- `POST /v1/extract`
+- `POST /v1/extract-url`
+- `POST /v1/extract-pdf`
+- `GET /v1/jobs/{jobId}`
+- `GET /v1/usage`
 
 Example `POST /v1/extract` request:
 
@@ -331,7 +285,7 @@ Example `POST /v1/extract` request:
 }
 ```
 
-Example response:
+Example `POST /v1/extract` response:
 
 ```json
 {
@@ -373,7 +327,7 @@ Example `POST /v1/extract-url` request:
 }
 ```
 
-Example response:
+Example `POST /v1/extract-url` response:
 
 ```json
 {
@@ -406,7 +360,7 @@ Example `POST /v1/extract-pdf` request:
 }
 ```
 
-Example response:
+Example `POST /v1/extract-pdf` response:
 
 ```json
 {
@@ -418,470 +372,140 @@ Example response:
 }
 ```
 
-Current mock extraction behavior:
+Example `GET /v1/jobs/{jobId}` response:
 
-- reads keys from the provided `schema`
-- returns `null` for missing values
-- detects emails with regex
-- detects numbers, prices, URLs, booleans, and date-like strings
-- extracts obvious `key: value` pairs and then coerces them to schema types
-- validates the request body, schema object, and extracted result types without external libraries
-- supports schema field types: `string`, `number`, `boolean`, `date`, `email`, `url`, `array:string`, `array:number`
-- coerces values like `$1,200.50` to `1200.5`, `yes`/`no` to booleans, and common date strings to ISO `YYYY-MM-DD`
-- keeps missing fields as `null`, but returns field-level validation errors when present values fail coercion or type checks and `options.debug` is enabled
+```json
+{
+  "ok": true,
+  "data": {
+    "jobId": "pdf_...",
+    "status": "completed",
+    "createdAt": "2026-06-18T10:09:59.947Z",
+    "result": {
+      "jobId": "extract_...",
+      "data": {
+        "invoiceNumber": "INV-123"
+      },
+      "confidence": 0.5,
+      "usage": {
+        "units": 1
+      }
+    }
+  }
+}
+```
+
+## DynamoDB Single-Table Design
+
+The backend uses one DynamoDB table exposed to Lambda as `EXTRACTKIT_TABLE_NAME`.
+
+Primary key:
+
+- `PK` as the partition key
+- `SK` as the sort key
+
+Current item patterns:
+
+- API key: `PK=APIKEY#{apiKeyHash}`, `SK=METADATA`
+- user: `PK=USER#{userId}`, `SK=METADATA`
+- usage by month: `PK=USER#{userId}`, `SK=USAGE#{yyyy-MM}`
+- job metadata: `PK=JOB#{jobId}`, `SK=METADATA`
+- user job listing: `PK=USER#{userId}`, `SK=JOB#{createdAt}#{jobId}`
+- extraction result: `PK=JOB#{jobId}`, `SK=RESULT`
+
+What this table currently stores:
+
+- user identity and plan metadata
+- API key ownership and status
+- monthly usage counters
+- job metadata and status
+- final extraction payloads
+
+## Current Behavior Notes
+
+`POST /v1/extract` currently:
+
+- reads keys from the provided schema
+- extracts obvious `key: value` pairs
+- detects emails, numbers, prices, URLs, booleans, and date-like strings
+- coerces supported field types without external validation libraries
 - stores the job and result in DynamoDB
 - increments monthly usage by 1 unit
 
-Additional `POST /v1/extract-url` behavior:
+Supported schema field types:
 
-- uses built-in `fetch` with a 10 second timeout
-- rejects fetched responses larger than 1,000,000 bytes
-- strips `script`, `style`, `nav`, `footer`, and `svg` before text cleanup
-- converts the remaining HTML to rough readable text with simple regex/manual cleanup
-- adds lightweight HTML-aware fallbacks for URL extraction only
-- uses `<title>` for fields like `title` or `headline`
-- uses the source request URL for `url` fields like `website`, `url`, or `link`
-- uses `<meta name="description">` for fields like `description`, `summary`, or `excerpt`
+- `string`
+- `number`
+- `boolean`
+- `date`
+- `email`
+- `url`
+- `array:string`
+- `array:number`
 
-Current `POST /v1/extract-pdf` behavior:
+`POST /v1/extract-url` currently:
 
-- validates `pdfUrl` as an absolute `http` or `https` URL
-- validates the provided `schema` using the same supported schema types as `POST /v1/extract`
-- creates a DynamoDB job with status `queued`
+- fetches the target URL with a 10 second timeout
+- rejects responses larger than 1,000,000 bytes
+- strips noisy HTML like `script`, `style`, `nav`, `footer`, and `svg`
+- converts remaining HTML into rough readable text
+- applies lightweight HTML-aware fallbacks for title, description, and URL-like fields
+
+`POST /v1/extract-pdf` currently:
+
+- validates `pdfUrl`
+- validates the schema
+- creates a queued job item
+- returns immediately
 - does not parse the PDF yet
-- returns the queued job ID immediately
 
-## Test the deployment
+## Verify Deployment
 
-Current production custom domains:
+Redeploy:
 
 ```bash
-FRONTEND_URL="https://extractkit.vberkoz.com"
-API_URL="https://extractkit-api.vberkoz.com"
+./deploy.sh
 ```
 
-Get the frontend URL from CloudFormation:
+List stack outputs:
 
 ```bash
-aws --profile=basil cloudformation describe-stacks \
+aws --profile basil cloudformation describe-stacks \
   --stack-name extractkit \
   --region us-east-1 \
-  --query "Stacks[0].Outputs[?OutputKey=='FrontendUrl'].OutputValue | [0]" \
-  --output text
+  --query "Stacks[0].Outputs[].[OutputKey,OutputValue]" \
+  --output table
 ```
 
-Open that URL in a browser. The page should load the ExtractKit app with:
-
-- an `ExtractKit` header
-- a browser-persisted API key input
-- tabs for `Text Extract`, `URL Extract`, `Usage`, and `Docs`
-- JSON result panels for text and URL extraction
-
-Get the backend URL from CloudFormation:
+Confirm stack resources:
 
 ```bash
-aws --profile=basil cloudformation describe-stacks \
+aws --profile basil cloudformation describe-stack-resources \
   --stack-name extractkit \
   --region us-east-1 \
-  --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue | [0]" \
-  --output text
+  --query "StackResources[].[LogicalResourceId,ResourceType,PhysicalResourceId]" \
+  --output table
 ```
 
-Set the backend URL:
-
-```bash
-BASE_URL="$(aws --profile=basil cloudformation describe-stacks \
-  --stack-name extractkit \
-  --region us-east-1 \
-  --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue | [0]" \
-  --output text)"
-```
-
-If you are still on the legacy template, query `FrontendWebsiteUrl` and `BackendFunctionUrl` instead.
-
-Create a dev API key:
-
-```bash
-AWS_PROFILE=basil EXTRACTKIT_TABLE_NAME=extractkit AWS_REGION=us-east-1 npm run create:api-key
-```
-
-The script creates:
-
-- a dev user item
-- an API key item
-- a raw `ek_live_...` key printed once to stdout
-
-Set the raw key from the script output:
-
-```bash
-KEY='ek_live_replace_me'
-```
-
-Health check stays public:
-
-```bash
-curl -i "$BASE_URL/v1/health"
-```
-
-Expected response shape:
-
-```json
-{"ok":true,"data":{"service":"extractkit","status":"ok","timestamp":"..."}}
-```
-
-Protected route without auth should fail:
-
-```bash
-curl -i "$BASE_URL/v1/usage"
-```
-
-Expected status: `401 Unauthorized`
-
-Protected route with a bad key should fail:
-
-```bash
-curl -i "$BASE_URL/v1/usage" \
-  -H "Authorization: Bearer ek_live_not_real"
-```
-
-Expected status: `401 Unauthorized`
-
-Protected route with a valid key should succeed:
-
-```bash
-curl -i "$BASE_URL/v1/usage" \
-  -H "Authorization: Bearer $KEY"
-```
-
-Expected response shape:
-
-```json
-{"ok":true,"data":{"month":"2026-06","used":0,"limit":10000,"plan":"dev"}}
-```
-
-Protected POST route with a valid key should succeed:
-
-```bash
-curl -i "$BASE_URL/v1/extract-url" \
-  -H "Authorization: Bearer $KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"url":"https://example.com","schema":{"title":"string","website":"url"},"options":{"mode":"sync","debug":true}}'
-```
-
-Expected response shape:
-
-```json
-{"ok":true,"data":{"jobId":"url_...","data":{"title":"Example Domain","website":"https://example.com/"},"confidence":0.5,"usage":{"units":1}}}
-```
-
-Run the live PDF placeholder test script:
-
-```bash
-npm run test:extract-pdf
-```
-
-Run the live extract test script:
+Run smoke tests:
 
 ```bash
 npm run test:live-extract
-```
-
-Run the custom-domain smoke test script:
-
-```bash
-npm run test:custom-domains
-```
-
-Run the deployed frontend and API smoke test script:
-
-```bash
-EXTRACTKIT_FRONTEND_URL=https://extractkit.vberkoz.com \
-EXTRACTKIT_API_URL=https://extractkit-api.vberkoz.com \
-EXTRACTKIT_API_KEY="$KEY" \
 npm run test:frontend-live
-```
-
-Run the all-in-one live smoke test:
-
-```bash
+npm run test:custom-domains
+npm run test:get-job
+npm run test:extract-pdf
+npm run test:usage
 npm run test:live-smoke
 ```
 
-Run the live usage test script:
+## Next Implementation Priorities
 
-```bash
-npm run test:usage
-```
+Based on the current repo state, the next high-value priorities are:
 
-Live scripts resolve the API base URL in this order:
-
-- `EXTRACTKIT_BASE_URL`
-- CloudFormation output `ApiUrl`
-- CloudFormation output `BackendFunctionUrl`
-- the hardcoded Lambda URL fallback
-
-You can override the defaults with:
-
-- `EXTRACTKIT_BASE_URL`
-- `EXTRACTKIT_FRONTEND_URL`
-- `EXTRACTKIT_API_URL`
-- `EXTRACTKIT_API_KEY`
-- `STACK_NAME`
-- `AWS_PROFILE`
-- `AWS_REGION`
-
-If the deployed endpoint still returns the older placeholder usage payload, redeploy the backend before relying on the usage smoke test.
-
-Authenticated route examples:
-
-```bash
-AUTH_HEADER="Authorization: Bearer $KEY"
-```
-
-For JSON requests, keep newline characters inside `content` escaped as `\n`. Literal line breaks inside the JSON string will fail with `INVALID_JSON`.
-
-Happy-path extract check:
-
-```bash
-curl -i -X POST "$BASE_URL/v1/extract" \
-  -H "content-type: application/json" \
-  -H "$AUTH_HEADER" \
-  -d '{"content":"companyName: Acme Inc\ncontactEmail: hello@acme.com\nprice: $1,200.50\nactive: yes\nlaunchedOn: March 4, 2025\ntags: alpha, beta\nscores: 10, 20, 30\nwebsite: https://acme.com","schema":{"companyName":"string","contactEmail":"email","price":"number","active":"boolean","launchedOn":"date","tags":"array:string","scores":"array:number","website":"url"},"options":{"mode":"sync","debug":true}}'
-```
-
-Expected status: `200 OK`
-
-Expected response details:
-
-- `price` is coerced to `1200.5`
-- `active` is coerced to `true`
-- `launchedOn` is coerced to ISO date `2025-03-04`
-- `tags` is returned as `["alpha","beta"]`
-- `scores` is returned as `[10,20,30]`
-
-```bash
-curl -i -X POST "$BASE_URL/v1/extract-url" \
-  -H "content-type: application/json" \
-  -H "$AUTH_HEADER" \
-  -d '{"url":"https://example.com","schema":{"title":"string","website":"url","description":"string"},"options":{"mode":"sync","debug":true}}'
-```
-
-```bash
-curl -i -X POST "$BASE_URL/v1/extract-pdf" \
-  -H "content-type: application/json" \
-  -H "$AUTH_HEADER" \
-  -d '{"pdfUrl":"https://example.com/file.pdf","schema":{"invoiceNumber":"string","totalAmount":"number","vendorEmail":"email"}}'
-```
-
-```bash
-curl -i "$BASE_URL/v1/jobs/test-job-123" \
-  -H "$AUTH_HEADER"
-```
-
-After a successful extract request, use the returned job ID here:
-
-```bash
-curl -i "$BASE_URL/v1/jobs/extract_replace_me" \
-  -H "$AUTH_HEADER"
-```
-
-For a queued PDF job, the response should include `status: "queued"` and `result: null` until processing is implemented.
-
-```bash
-curl -i "$BASE_URL/v1/usage" \
-  -H "$AUTH_HEADER"
-```
-
-Error-path checks we verified:
-
-Present but invalid values should return `422 Unprocessable Entity` with field-level errors in debug mode:
-
-```bash
-curl -i -X POST "$BASE_URL/v1/extract" \
-  -H "content-type: application/json" \
-  -H "$AUTH_HEADER" \
-  -d '{"content":"email: not-an-email\nwebsite: ftp://bad.example\nactive: maybe\nscores: 1, two, 3","schema":{"email":"email","website":"url","active":"boolean","scores":"array:number"},"options":{"mode":"sync","debug":true}}'
-```
-
-Expected response details:
-
-- status is `422 Unprocessable Entity`
-- `error.code` is `EXTRACTION_VALIDATION_FAILED`
-- `error.fields` includes `email`, `website`, `active`, and `scores`
-
-Missing values should remain `null` and should not fail validation:
-
-```bash
-curl -i -X POST "$BASE_URL/v1/extract" \
-  -H "content-type: application/json" \
-  -H "$AUTH_HEADER" \
-  -d '{"content":"companyName: Acme Inc","schema":{"companyName":"string","website":"url","active":"boolean"},"options":{"mode":"sync","debug":true}}'
-```
-
-Expected response details:
-
-- status is `200 OK`
-- `website` is `null`
-- `active` is `null`
-
-```bash
-curl -i -X POST "$BASE_URL/v1/extract-url" \
-  -H "content-type: application/json" \
-  -H "$AUTH_HEADER" \
-  -d '{}'
-```
-
-```bash
-curl -i -X POST "$BASE_URL/v1/extract-pdf" \
-  -H "content-type: application/json" \
-  -H "$AUTH_HEADER" \
-  -d '{}'
-```
-
-```bash
-curl -i -X POST "$BASE_URL/v1/extract" \
-  -H "content-type: application/json" \
-  -H "$AUTH_HEADER" \
-  -d '{'
-```
-
-```bash
-curl -i "$BASE_URL/v1/unknown"
-```
-
-Security note:
-
-- rotate any API key after pasting it into a terminal transcript, shell history, or chat
-
-## Test DynamoDB table from the terminal
-
-Seed an API key item:
-
-```bash
-aws --profile basil dynamodb put-item \
-  --table-name extractkit \
-  --region us-east-1 \
-  --item '{
-    "PK":{"S":"APIKEY#hash_123"},
-    "SK":{"S":"METADATA"},
-    "apiKeyHash":{"S":"hash_123"},
-    "userId":{"S":"user_123"},
-    "status":{"S":"active"}
-  }'
-```
-
-Read back the seeded API key:
-
-```bash
-aws --profile basil dynamodb get-item \
-  --table-name extractkit \
-  --region us-east-1 \
-  --key '{
-    "PK":{"S":"APIKEY#hash_123"},
-    "SK":{"S":"METADATA"}
-  }'
-```
-
-Create a job metadata item:
-
-```bash
-aws --profile basil dynamodb put-item \
-  --table-name extractkit \
-  --region us-east-1 \
-  --item '{
-    "PK":{"S":"JOB#job_123"},
-    "SK":{"S":"METADATA"},
-    "entityType":{"S":"JOB"},
-    "jobId":{"S":"job_123"},
-    "userId":{"S":"user_123"},
-    "createdAt":{"S":"2026-06-18T12:00:00.000Z"},
-    "status":{"S":"queued"}
-  }'
-```
-
-Create the matching user-job item:
-
-```bash
-aws --profile basil dynamodb put-item \
-  --table-name extractkit \
-  --region us-east-1 \
-  --item '{
-    "PK":{"S":"USER#user_123"},
-    "SK":{"S":"JOB#2026-06-18T12:00:00.000Z#job_123"},
-    "entityType":{"S":"USER_JOB"},
-    "jobId":{"S":"job_123"},
-    "userId":{"S":"user_123"},
-    "createdAt":{"S":"2026-06-18T12:00:00.000Z"},
-    "status":{"S":"queued"}
-  }'
-```
-
-Save a job result item:
-
-```bash
-aws --profile basil dynamodb put-item \
-  --table-name extractkit \
-  --region us-east-1 \
-  --item '{
-    "PK":{"S":"JOB#job_123"},
-    "SK":{"S":"RESULT"},
-    "entityType":{"S":"JOB_RESULT"},
-    "jobId":{"S":"job_123"},
-    "updatedAt":{"S":"2026-06-18T12:05:00.000Z"},
-    "result":{"M":{"text":{"S":"done"},"pages":{"N":"1"}}}
-  }'
-```
-
-Create or update monthly usage:
-
-```bash
-aws --profile basil dynamodb update-item \
-  --table-name extractkit \
-  --region us-east-1 \
-  --key '{
-    "PK":{"S":"USER#user_123"},
-    "SK":{"S":"USAGE#202606"}
-  }' \
-  --update-expression "SET #entityType = if_not_exists(#entityType, :entityType), #userId = if_not_exists(#userId, :userId), #yyyyMM = if_not_exists(#yyyyMM, :yyyyMM), #updatedAt = :updatedAt ADD #amount :amount" \
-  --expression-attribute-names '{"#entityType":"entityType","#userId":"userId","#yyyyMM":"yyyyMM","#updatedAt":"updatedAt","#amount":"amount"}' \
-  --expression-attribute-values '{":entityType":{"S":"USAGE"},":userId":{"S":"user_123"},":yyyyMM":{"S":"202606"},":updatedAt":{"S":"2026-06-18T12:10:00.000Z"},":amount":{"N":"3"}}' \
-  --return-values ALL_NEW
-```
-
-Query recent jobs for the user:
-
-```bash
-aws --profile basil dynamodb query \
-  --table-name extractkit \
-  --region us-east-1 \
-  --key-condition-expression "PK = :pk AND begins_with(SK, :prefix)" \
-  --expression-attribute-values '{
-    ":pk":{"S":"USER#user_123"},
-    ":prefix":{"S":"JOB#"}
-  }' \
-  --scan-index-forward false
-```
-
-Read the job metadata:
-
-```bash
-aws --profile basil dynamodb get-item \
-  --table-name extractkit \
-  --region us-east-1 \
-  --key '{
-    "PK":{"S":"JOB#job_123"},
-    "SK":{"S":"METADATA"}
-  }'
-```
-
-Read the job result:
-
-```bash
-aws --profile basil dynamodb get-item \
-  --table-name extractkit \
-  --region us-east-1 \
-  --key '{
-    "PK":{"S":"JOB#job_123"},
-    "SK":{"S":"RESULT"}
-  }'
-```
+1. Implement real extraction beyond mock `key: value` parsing, including better confidence and validation behavior.
+2. Finish the async PDF pipeline so queued jobs are actually processed and written back with results.
+3. Add local development ergonomics such as a local app server, local API run mode, and a lightweight automated test loop.
+4. Tighten auth and tenant controls around API keys, plan enforcement, rate limits, and disabled-key handling.
+5. Expand observability with structured logs, failure visibility, and clearer job lifecycle metrics.
+6. Add more complete API docs and frontend affordances for job polling, PDF workflows, and error inspection.
