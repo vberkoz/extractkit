@@ -12,7 +12,7 @@ Minimal TypeScript monorepo with:
 
 This repo is intentionally small and mostly centered around one backend Lambda handler.
 
-- the frontend is a static smoke-test page that only confirms the bundle loaded
+- the frontend is a minimal single-page client for text extraction, URL extraction, usage lookup, and API docs
 - the backend is a single Lambda entrypoint at `backend/src/handler.ts`
 - the backend persists API keys, jobs, results, and usage in one DynamoDB table
 - there is no local app server or test runner in the repo right now
@@ -22,7 +22,7 @@ This repo is intentionally small and mostly centered around one backend Lambda h
 
 - `backend/src/handler.ts`: HTTP routing, auth, request parsing, mock extraction, schema validation, and API responses
 - `backend/src/dynamodb.ts`: DynamoDB access helpers for API keys, jobs, results, and usage
-- `frontend/src/index.ts`: minimal frontend entrypoint that writes a timestamp into the page
+- `frontend/src/index.ts`: frontend app with API key persistence, tabbed extract flows, usage lookup, and inline docs
 - `frontend/index.html` and `frontend/styles.css`: static site assets copied to `dist/frontend`
 - `infra/cloudformation.yaml`: production CloudFormation for CloudFront, custom domains, Route53, HTTP API, Lambda, DynamoDB, and S3 buckets
 - `infra/template.yaml`: older minimal CloudFormation for the DynamoDB table, S3 website bucket, Lambda, and Function URL
@@ -34,6 +34,7 @@ This repo is intentionally small and mostly centered around one backend Lambda h
 - `scripts/create-api-key.ts`: seeds a dev user and API key into DynamoDB and prints the raw key once
 - `scripts/test-live-extract.mjs`: sends a live `POST /v1/extract` request and validates the extracted response payload
 - `scripts/test-custom-domains.mjs`: verifies the frontend custom domain, API health route, and authenticated extract request against the deployed custom domains
+- `scripts/test-frontend-live.mjs`: verifies the deployed frontend, health route, usage route, text extraction, and URL extraction against the live custom domains
 - `scripts/test-extract-pdf.mjs`: sends a live `POST /v1/extract-pdf` request to the deployed API using bearer auth
 - `scripts/test-get-job.mjs`: sends a live `POST /v1/extract-pdf` request, then fetches the created job with `GET /v1/jobs/{jobId}`
 - `scripts/test-live-smoke.mjs`: runs `health`, `usage`, queued PDF creation, and job retrieval in one live smoke pass
@@ -47,12 +48,14 @@ This repo is intentionally small and mostly centered around one backend Lambda h
 - `POST /v1/extract-pdf` is an async placeholder that validates `pdfUrl` and `schema`, stores a queued job, and returns a `jobId`
 - `GET /v1/usage` returns the authenticated user's current-month usage from DynamoDB
 - `GET /v1/jobs/{jobId}` reads the stored job metadata, including job status, and any saved extraction result
+- the deployed frontend targets `https://extractkit-api.vberkoz.com` and stores the API key in browser `localStorage`
 
 ## Build outputs
 
 - `npm run build:frontend` writes `dist/frontend/app.js`, `dist/frontend/index.html`, and `dist/frontend/styles.css`
 - `npm run build:backend` writes `dist/backend/index.js` and `dist/backend/index.js.map`
 - `npm run build` runs both builds
+- `npm run test:frontend-live` runs a live frontend and API smoke test against the deployed custom domains
 - `npm run test:live-extract` runs a live extract endpoint smoke test
 - `npm run test:custom-domains` verifies the frontend and API custom domains end to end
 - `npm run test:extract-pdf` runs the live queued PDF job smoke test
@@ -202,6 +205,15 @@ Run the live extract smoke test:
 
 ```bash
 npm run test:live-extract
+```
+
+Run the deployed frontend and API smoke test:
+
+```bash
+EXTRACTKIT_FRONTEND_URL=https://extractkit.vberkoz.com \
+EXTRACTKIT_API_URL=https://extractkit-api.vberkoz.com \
+EXTRACTKIT_API_KEY='ek_live_replace_me' \
+npm run test:frontend-live
 ```
 
 Run the custom-domain smoke test:
@@ -458,7 +470,12 @@ aws --profile=basil cloudformation describe-stacks \
   --output text
 ```
 
-Open that URL in a browser. The page should load and the status card should show that the frontend bundle loaded.
+Open that URL in a browser. The page should load the ExtractKit app with:
+
+- an `ExtractKit` header
+- a browser-persisted API key input
+- tabs for `Text Extract`, `URL Extract`, `Usage`, and `Docs`
+- JSON result panels for text and URL extraction
 
 Get the backend URL from CloudFormation:
 
@@ -573,6 +590,15 @@ Run the custom-domain smoke test script:
 
 ```bash
 npm run test:custom-domains
+```
+
+Run the deployed frontend and API smoke test script:
+
+```bash
+EXTRACTKIT_FRONTEND_URL=https://extractkit.vberkoz.com \
+EXTRACTKIT_API_URL=https://extractkit-api.vberkoz.com \
+EXTRACTKIT_API_KEY="$KEY" \
+npm run test:frontend-live
 ```
 
 Run the all-in-one live smoke test:

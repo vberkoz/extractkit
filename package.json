@@ -12,6 +12,7 @@
     "build": "npm run build:frontend && npm run build:backend",
     "create:api-key": "node ./scripts/run-create-api-key.mjs",
     "test:live-smoke": "node ./scripts/test-live-smoke.mjs",
+    "test:frontend-live": "node ./scripts/test-frontend-live.mjs",
     "test:live-extract": "node ./scripts/test-live-extract.mjs",
     "test:custom-domains": "node ./scripts/test-custom-domains.mjs",
     "test:get-job": "node ./scripts/test-get-job.mjs",
