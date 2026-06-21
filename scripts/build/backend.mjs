@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { build } from "esbuild";
 
 const scriptDir = fileURLToPath(new URL(".", import.meta.url));
-const rootDir = resolve(scriptDir, "..");
+const rootDir = resolve(scriptDir, "../..");
 const outDir = resolve(rootDir, "dist/backend");
 
 await mkdir(outDir, { recursive: true });

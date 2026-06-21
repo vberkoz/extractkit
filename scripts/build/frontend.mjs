@@ -4,13 +4,13 @@ import { resolve } from "node:path";
 import { build } from "esbuild";
 
 const scriptDir = fileURLToPath(new URL(".", import.meta.url));
-const rootDir = resolve(scriptDir, "..");
+const rootDir = resolve(scriptDir, "../..");
 const outDir = resolve(rootDir, "dist/frontend");
 
 await mkdir(outDir, { recursive: true });
 
 await build({
-  entryPoints: [resolve(rootDir, "frontend/src/index.ts")],
+  entryPoints: [resolve(rootDir, "frontend/src/main.ts")],
   outfile: resolve(outDir, "app.js"),
   bundle: true,
   format: "esm",
@@ -19,4 +19,6 @@ await build({
 });
 
 await cp(resolve(rootDir, "frontend/index.html"), resolve(outDir, "index.html"));
+await cp(resolve(rootDir, "frontend/favicon.svg"), resolve(outDir, "favicon.svg"));
 await cp(resolve(rootDir, "frontend/styles.css"), resolve(outDir, "styles.css"));
+await cp(resolve(rootDir, "frontend/styles"), resolve(outDir, "styles"), { recursive: true });

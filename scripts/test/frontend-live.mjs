@@ -1,44 +1,13 @@
+import { assert, logJsonResult, parseJsonResponse } from "./lib/helpers.mjs";
+import {
+  SAMPLE_TEXT_EXTRACT_REQUEST,
+  SAMPLE_URL_EXTRACT_REQUEST
+} from "./lib/fixtures.mjs";
 const frontendUrl =
   process.env.EXTRACTKIT_FRONTEND_URL ?? "https://extractkit.vberkoz.com";
 const apiUrl =
   process.env.EXTRACTKIT_API_URL ?? "https://extractkit-api.vberkoz.com";
 const apiKey = process.env.EXTRACTKIT_API_KEY;
-
-const textExtractRequestBody = {
-  content: [
-    "companyName: Acme Inc",
-    "contactEmail: hello@acme.com",
-    "price: $1,200.50",
-    "active: yes",
-    "launchedOn: March 4, 2025",
-    "tags: alpha, beta",
-    "scores: 10, 20, 30",
-    "website: https://acme.com"
-  ].join("\n"),
-  schema: {
-    companyName: "string",
-    contactEmail: "email",
-    price: "number",
-    active: "boolean",
-    launchedOn: "date",
-    tags: "array:string",
-    scores: "array:number",
-    website: "url"
-  },
-  options: {
-    mode: "sync"
-  }
-};
-
-const urlExtractRequestBody = {
-  url: "https://example.com",
-  schema: {
-    title: "string"
-  },
-  options: {
-    mode: "sync"
-  }
-};
 
 await run();
 
@@ -56,8 +25,8 @@ async function run() {
   assert(frontendHtml.includes('src="./app.js"'), "Frontend bundle script tag was not found.");
 
   const healthResponse = await fetch(new URL("/v1/health", apiUrl));
-  const healthBody = await parseJson(healthResponse);
-  logResult("Health", healthResponse.status, healthBody);
+  const healthBody = await parseJsonResponse(healthResponse);
+  logJsonResult("Health", healthResponse.status, healthBody);
   assert(healthResponse.ok, "Health request failed.");
   assert(healthBody?.ok === true, "Health response did not return ok=true.");
 
@@ -67,8 +36,8 @@ async function run() {
       authorization: `Bearer ${apiKey}`
     }
   });
-  const usageBody = await parseJson(usageResponse);
-  logResult("Usage", usageResponse.status, usageBody);
+  const usageBody = await parseJsonResponse(usageResponse);
+  logJsonResult("Usage", usageResponse.status, usageBody);
   assert(usageResponse.ok, "Usage request failed.");
   assert(typeof usageBody?.data?.used === "number", "Usage response did not include used.");
   assert(typeof usageBody?.data?.limit === "number", "Usage response did not include limit.");
@@ -80,10 +49,15 @@ async function run() {
       authorization: `Bearer ${apiKey}`,
       "content-type": "application/json"
     },
-    body: JSON.stringify(textExtractRequestBody)
+    body: JSON.stringify({
+      ...SAMPLE_TEXT_EXTRACT_REQUEST,
+      options: {
+        mode: "sync"
+      }
+    })
   });
-  const textExtractBody = await parseJson(textExtractResponse);
-  logResult("Text extract", textExtractResponse.status, textExtractBody);
+  const textExtractBody = await parseJsonResponse(textExtractResponse);
+  logJsonResult("Text extract", textExtractResponse.status, textExtractBody);
   assert(textExtractResponse.ok, "Text extract request failed.");
 
   const extractedData = textExtractBody?.data?.data;
@@ -115,10 +89,10 @@ async function run() {
       authorization: `Bearer ${apiKey}`,
       "content-type": "application/json"
     },
-    body: JSON.stringify(urlExtractRequestBody)
+    body: JSON.stringify(SAMPLE_URL_EXTRACT_REQUEST)
   });
-  const urlExtractBody = await parseJson(urlExtractResponse);
-  logResult("URL extract", urlExtractResponse.status, urlExtractBody);
+  const urlExtractBody = await parseJsonResponse(urlExtractResponse);
+  logJsonResult("URL extract", urlExtractResponse.status, urlExtractBody);
   assert(urlExtractResponse.ok, "URL extract request failed.");
   assert(
     typeof urlExtractBody?.data?.data?.title === "string" &&
@@ -127,25 +101,4 @@ async function run() {
   );
 
   console.log("\nFrontend/API live smoke test passed.");
-}
-
-function assert(condition, message) {
-  if (!condition) {
-    throw new Error(message);
-  }
-}
-
-function logResult(label, status, body) {
-  console.log(`\n${label} status: ${status}`);
-  console.log(JSON.stringify(body, null, 2));
-}
-
-async function parseJson(response) {
-  const text = await response.text();
-
-  try {
-    return JSON.parse(text);
-  } catch {
-    return text;
-  }
 }

@@ -1,0 +1,102 @@
+.page {
+  display: grid;
+  gap: 24px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0;
+}
+
+.layout {
+  display: grid;
+  gap: 40px;
+}
+
+.section-grid,
+.api-grid,
+.cards-grid,
+.dashboard-grid,
+.panel-grid,
+.docs-grid,
+.usage-metrics,
+.pricing-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.hero {
+  grid-template-columns: minmax(0, 1.1fr) minmax(300px, 0.9fr);
+  align-items: stretch;
+}
+
+.section-stack {
+  display: grid;
+  gap: 14px;
+}
+
+.section-heading {
+  display: grid;
+  gap: 6px;
+  max-width: 680px;
+}
+
+.workspace {
+  display: grid;
+  gap: 14px;
+}
+
+.workspace-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: start;
+}
+
+.panel-stack,
+.tab-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.panel-stack {
+  position: relative;
+}
+
+.tabs {
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #ffffff;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.usage-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.cards-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.pricing-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.panel-grid,
+.docs-grid,
+.api-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}

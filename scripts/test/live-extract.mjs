@@ -1,34 +1,9 @@
-import { getApiKey, getBaseUrl } from "./lib/runtime-config.mjs";
+import { assert, parseJsonResponse } from "./lib/helpers.mjs";
+import { SAMPLE_TEXT_EXTRACT_REQUEST } from "./lib/fixtures.mjs";
+import { getApiKey, getBaseUrl } from "../lib/runtime-config.mjs";
 
 const baseUrl = getBaseUrl();
 const apiKey = getApiKey();
-
-const requestBody = {
-  content: [
-    "companyName: Acme Inc",
-    "contactEmail: hello@acme.com",
-    "price: $1,200.50",
-    "active: yes",
-    "launchedOn: March 4, 2025",
-    "tags: alpha, beta",
-    "scores: 10, 20, 30",
-    "website: https://acme.com"
-  ].join("\n"),
-  schema: {
-    companyName: "string",
-    contactEmail: "email",
-    price: "number",
-    active: "boolean",
-    launchedOn: "date",
-    tags: "array:string",
-    scores: "array:number",
-    website: "url"
-  },
-  options: {
-    mode: "sync",
-    debug: true
-  }
-};
 
 await run();
 
@@ -41,10 +16,10 @@ async function run() {
       authorization: `Bearer ${apiKey}`,
       "content-type": "application/json"
     },
-    body: JSON.stringify(requestBody)
+    body: JSON.stringify(SAMPLE_TEXT_EXTRACT_REQUEST)
   });
 
-  const responseBody = await parseResponseBody(response);
+  const responseBody = await parseJsonResponse(response);
 
   console.log(`Status: ${response.status}`);
   console.log(JSON.stringify(responseBody, null, 2));
@@ -69,20 +44,4 @@ async function run() {
   assert(data?.website === "https://acme.com", "Expected website to be parsed.");
 
   console.log("Live extract test passed.");
-}
-
-function assert(condition, message) {
-  if (!condition) {
-    throw new Error(message);
-  }
-}
-
-async function parseResponseBody(response) {
-  const text = await response.text();
-
-  try {
-    return JSON.parse(text);
-  } catch {
-    return text;
-  }
 }

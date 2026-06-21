@@ -1,3 +1,5 @@
+import { assert, parseJsonResponse } from "./lib/helpers.mjs";
+import { SAMPLE_TEXT_EXTRACT_REQUEST } from "./lib/fixtures.mjs";
 const frontendUrl =
   process.env.EXTRACTKIT_FRONTEND_URL ?? "https://extractkit.vberkoz.com";
 const apiUrl =
@@ -5,33 +7,6 @@ const apiUrl =
 const apiKey =
   process.env.EXTRACTKIT_API_KEY ??
   "ek_live_541b52ba75561b5f18f5b8ff39379ca589e35586921bc230";
-
-const extractRequestBody = {
-  content: [
-    "companyName: Acme Inc",
-    "contactEmail: hello@acme.com",
-    "price: $1,200.50",
-    "active: yes",
-    "launchedOn: March 4, 2025",
-    "tags: alpha, beta",
-    "scores: 10, 20, 30",
-    "website: https://acme.com"
-  ].join("\n"),
-  schema: {
-    companyName: "string",
-    contactEmail: "email",
-    price: "number",
-    active: "boolean",
-    launchedOn: "date",
-    tags: "array:string",
-    scores: "array:number",
-    website: "url"
-  },
-  options: {
-    mode: "sync",
-    debug: true
-  }
-};
 
 await run();
 
@@ -47,7 +22,7 @@ async function run() {
   assert(frontendHtml.includes('id="app"'), "Frontend status placeholder was not found.");
 
   const healthResponse = await fetch(new URL("/v1/health", apiUrl));
-  const healthBody = await parseJson(healthResponse);
+  const healthBody = await parseJsonResponse(healthResponse);
   console.log(`Health status: ${healthResponse.status}`);
   console.log(JSON.stringify(healthBody, null, 2));
   assert(healthResponse.ok, "Health request failed.");
@@ -59,9 +34,9 @@ async function run() {
       authorization: `Bearer ${apiKey}`,
       "content-type": "application/json"
     },
-    body: JSON.stringify(extractRequestBody)
+    body: JSON.stringify(SAMPLE_TEXT_EXTRACT_REQUEST)
   });
-  const extractBody = await parseJson(extractResponse);
+  const extractBody = await parseJsonResponse(extractResponse);
   console.log(`Extract status: ${extractResponse.status}`);
   console.log(JSON.stringify(extractBody, null, 2));
 
@@ -85,20 +60,4 @@ async function run() {
   assert(data?.website === "https://acme.com", "Expected website to be parsed.");
 
   console.log("Custom domain smoke test passed.");
-}
-
-function assert(condition, message) {
-  if (!condition) {
-    throw new Error(message);
-  }
-}
-
-async function parseJson(response) {
-  const text = await response.text();
-
-  try {
-    return JSON.parse(text);
-  } catch {
-    return text;
-  }
 }

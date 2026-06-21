@@ -1,4 +1,5 @@
-import { getApiKey, getBaseUrl } from "./lib/runtime-config.mjs";
+import { parseJsonResponse } from "./lib/helpers.mjs";
+import { getApiKey, getBaseUrl } from "../lib/runtime-config.mjs";
 
 const baseUrl = getBaseUrl();
 const apiKey = getApiKey();
@@ -10,7 +11,7 @@ const response = await fetch(new URL("/v1/usage", baseUrl), {
   }
 });
 
-const responseBody = await parseResponseBody(response);
+const responseBody = await parseJsonResponse(response);
 
 console.log(`Status: ${response.status}`);
 console.log(JSON.stringify(responseBody, null, 2));
@@ -29,14 +30,4 @@ if (!response.ok) {
     console.error("Response body did not match expected usage shape.");
     process.exitCode = 1;
   }
-}
-
-function parseResponseBody(response) {
-  return response.text().then((text) => {
-    try {
-      return JSON.parse(text);
-    } catch {
-      return text;
-    }
-  });
 }

@@ -1,16 +1,9 @@
-import { getApiKey, getBaseUrl } from "./lib/runtime-config.mjs";
+import { assert, logJsonResult, parseJsonResponse } from "./lib/helpers.mjs";
+import { SAMPLE_PDF_EXTRACT_REQUEST } from "./lib/fixtures.mjs";
+import { getApiKey, getBaseUrl } from "../lib/runtime-config.mjs";
 
 const baseUrl = getBaseUrl();
 const apiKey = getApiKey();
-
-const createJobRequestBody = {
-  pdfUrl: "https://example.com/file.pdf",
-  schema: {
-    invoiceNumber: "string",
-    totalAmount: "number",
-    vendorEmail: "email"
-  }
-};
 
 await run();
 
@@ -18,8 +11,8 @@ async function run() {
   console.log(`Base URL: ${baseUrl}`);
 
   const healthResponse = await fetch(new URL("/v1/health", baseUrl));
-  const healthBody = await parseResponseBody(healthResponse);
-  logResult("Health", healthResponse.status, healthBody);
+  const healthBody = await parseJsonResponse(healthResponse);
+  logJsonResult("Health", healthResponse.status, healthBody);
   assert(healthResponse.ok, "Health check failed.");
 
   const usageResponse = await fetch(new URL("/v1/usage", baseUrl), {
@@ -28,8 +21,8 @@ async function run() {
       authorization: `Bearer ${apiKey}`
     }
   });
-  const usageBody = await parseResponseBody(usageResponse);
-  logResult("Usage", usageResponse.status, usageBody);
+  const usageBody = await parseJsonResponse(usageResponse);
+  logJsonResult("Usage", usageResponse.status, usageBody);
   assert(usageResponse.ok, "Usage request failed.");
   assert(
     typeof usageBody?.data?.month === "string" &&
@@ -45,10 +38,10 @@ async function run() {
       authorization: `Bearer ${apiKey}`,
       "content-type": "application/json"
     },
-    body: JSON.stringify(createJobRequestBody)
+    body: JSON.stringify(SAMPLE_PDF_EXTRACT_REQUEST)
   });
-  const createJobBody = await parseResponseBody(createJobResponse);
-  logResult("Create job", createJobResponse.status, createJobBody);
+  const createJobBody = await parseJsonResponse(createJobResponse);
+  logJsonResult("Create job", createJobResponse.status, createJobBody);
   assert(createJobResponse.ok, "Create job request failed.");
 
   const jobId = createJobBody?.data?.jobId;
@@ -60,31 +53,10 @@ async function run() {
       authorization: `Bearer ${apiKey}`
     }
   });
-  const getJobBody = await parseResponseBody(getJobResponse);
-  logResult("Get job", getJobResponse.status, getJobBody);
+  const getJobBody = await parseJsonResponse(getJobResponse);
+  logJsonResult("Get job", getJobResponse.status, getJobBody);
   assert(getJobResponse.ok, "Get job request failed.");
   assert(getJobBody?.data?.jobId === jobId, "Fetched job did not match the created job.");
 
   console.log("Smoke test passed.");
-}
-
-function assert(condition, message) {
-  if (!condition) {
-    throw new Error(message);
-  }
-}
-
-function logResult(label, status, body) {
-  console.log(`\n${label} status: ${status}`);
-  console.log(JSON.stringify(body, null, 2));
-}
-
-async function parseResponseBody(response) {
-  const text = await response.text();
-
-  try {
-    return JSON.parse(text);
-  } catch {
-    return text;
-  }
 }

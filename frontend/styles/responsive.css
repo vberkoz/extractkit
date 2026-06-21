@@ -1,0 +1,51 @@
+@media (max-width: 980px) {
+  .hero,
+  .api-grid,
+  .cards-grid,
+  .pricing-grid,
+  .docs-grid,
+  .panel-grid,
+  .tab-panel-header {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-header,
+  .topbar {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+}
+
+@media (max-width: 760px) {
+  .shell {
+    width: min(100% - 24px, 1240px);
+    padding-top: 10px;
+    padding-bottom: 28px;
+  }
+
+  .layout {
+    gap: 32px;
+  }
+
+  .panel-hero,
+  .hero-panel,
+  .workspace,
+  .code-panel,
+  .info-card,
+  .pricing-panel {
+    padding: 16px;
+  }
+
+  .usage-metrics,
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-copy h1 {
+    max-width: none;
+  }
+
+  .topnav {
+    gap: 12px;
+  }
+}
