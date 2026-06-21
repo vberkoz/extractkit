@@ -21,7 +21,7 @@ Parameters:
 
   ApiDomainName:
     Type: String
-    Default: api.extractkit.vberkoz.com
+    Default: extractkit-api.vberkoz.com
     Description: API domain name
 
   ProjectName:
@@ -36,6 +36,17 @@ Parameters:
   CodeS3Key:
     Type: String
     Description: S3 key for the Lambda deployment artifact
+
+  BrowserRenderUrl:
+    Type: String
+    Default: ""
+    Description: Optional browser-render service URL for blocked /v1/extract-url fetches
+
+  BrowserRenderAuthToken:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: Optional bearer token for the browser-render service
 
 Resources:
   ExtractKitTable:
@@ -263,6 +274,27 @@ Resources:
                 Action:
                   - s3:ListBucket
                 Resource: !GetAtt FilesBucket.Arn
+        - PolicyName: !Sub "${ProjectName}-bedrock-access"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: BedrockModelAccess
+                Effect: Allow
+                Action:
+                  - bedrock:Converse
+                  - bedrock:ConverseStream
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource: "*"
+        - PolicyName: !Sub "${ProjectName}-textract-access"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: TextractDetectDocumentText
+                Effect: Allow
+                Action:
+                  - textract:DetectDocumentText
+                Resource: "*"
       Tags:
         - Key: Project
           Value: !Ref ProjectName
@@ -285,6 +317,10 @@ Resources:
           EXTRACTKIT_FILES_BUCKET_NAME: !Ref FilesBucket
           EXTRACTKIT_FRONTEND_URL: !Sub "https://${DomainName}"
           EXTRACTKIT_API_BASE_URL: !Sub "https://${ApiDomainName}"
+          EXTRACTKIT_BEDROCK_REGION: !Ref AWS::Region
+          EXTRACTKIT_EXTRACT_MODEL_ID: amazon.nova-micro-v1:0
+          EXTRACTKIT_BROWSER_RENDER_URL: !Ref BrowserRenderUrl
+          EXTRACTKIT_BROWSER_RENDER_AUTH_TOKEN: !Ref BrowserRenderAuthToken
       Timeout: 30
       MemorySize: 512
       Tags:
