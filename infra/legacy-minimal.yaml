@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: ExtractKit minimal infrastructure
+Description: ExtractKit legacy minimal infrastructure
 
 Parameters:
   ProjectName:
@@ -9,6 +9,13 @@ Parameters:
     Type: String
   CodeS3Key:
     Type: String
+  BrowserRenderUrl:
+    Type: String
+    Default: ""
+  BrowserRenderAuthToken:
+    Type: String
+    Default: ""
+    NoEcho: true
 
 Resources:
   ExtractKitTable:
@@ -84,6 +91,25 @@ Resources:
                   - dynamodb:TransactWriteItems
                   - dynamodb:UpdateItem
                 Resource: !GetAtt ExtractKitTable.Arn
+        - PolicyName: BedrockAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:Converse
+                  - bedrock:ConverseStream
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource: "*"
+        - PolicyName: TextractAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - textract:DetectDocumentText
+                Resource: "*"
       Tags:
         - Key: Project
           Value: !Ref ProjectName
@@ -102,6 +128,10 @@ Resources:
       Environment:
         Variables:
           EXTRACTKIT_TABLE_NAME: !Ref ExtractKitTable
+          EXTRACTKIT_BEDROCK_REGION: !Ref AWS::Region
+          EXTRACTKIT_EXTRACT_MODEL_ID: amazon.nova-micro-v1:0
+          EXTRACTKIT_BROWSER_RENDER_URL: !Ref BrowserRenderUrl
+          EXTRACTKIT_BROWSER_RENDER_AUTH_TOKEN: !Ref BrowserRenderAuthToken
       Timeout: 10
       MemorySize: 256
       Tags:

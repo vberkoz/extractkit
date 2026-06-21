@@ -15,16 +15,17 @@ Today it supports:
 
 - `POST /v1/extract` for schema-based text extraction
 - `POST /v1/extract-url` for fetch-and-extract from a web page
-- `POST /v1/extract-pdf` as an async queued placeholder
+- `POST /v1/extract-pdf` for PDF text extraction plus schema-based extraction
 - `GET /v1/jobs/{jobId}` for reading stored job status and results
 - `GET /v1/usage` for current-month usage lookup
 - a frontend for trying the API without leaving the browser
 
 Current implementation notes:
 
-- extraction logic is still mock-style and built around `key: value` parsing plus light coercion
-- PDF extraction is not implemented yet beyond queueing a job record
+- extraction now uses Amazon Bedrock with Amazon Nova Micro only, and accepts nested JSON-schema-like request shapes for model-guided extraction
+- PDF extraction now fetches the PDF, prefers embedded text when it is usable, selectively OCRs weak/scanned pages with Textract, and sends the merged text to Amazon Nova Micro
 - the frontend stores the API key in browser `localStorage`
+- `POST /v1/extract-url` now uses browser-like fetch headers and can optionally fall back to a configured browser-render service when direct fetches are blocked
 - there is no local app server in this repo right now
 
 ## Architecture
@@ -50,15 +51,32 @@ Route53 + ACM
 Code layout:
 
 - `frontend/`: static frontend app bundled with `esbuild`
-- `frontend/src/index.ts`: UI rendering, API calls, API key persistence, docs/examples
+- `frontend/src/main.ts`: thin frontend bootstrap that renders the app shell and wires feature modules
+- `frontend/src/config/`: split runtime configuration and UI defaults for API URLs, storage keys, and starter schemas
+- `frontend/src/layout/`: page shell and header composition modules that keep top-level markup out of the bootstrap file
+- `frontend/src/features/`: tab-specific UI modules for text extraction, URL extraction, usage, docs, and workspace tabs, plus feature-local selectors and shared workspace helpers
+- `frontend/src/sections/`: product-site sections such as hero, API examples, use cases, and pricing
+- `frontend/src/lib/`: shared frontend helpers for API calls, DOM access, schema parsing, storage, and types
 - `frontend/index.html`: HTML entrypoint
-- `frontend/styles.css`: plain CSS styling
+- `frontend/styles.css` and `frontend/styles/`: CSS entrypoint plus split tokens, base, layout, marketing, workspace, and responsive styles
 - `backend/`: Lambda backend bundled with `esbuild`
-- `backend/src/handler.ts`: HTTP routing, auth, validation, extraction logic, responses
-- `backend/src/dynamodb.ts`: DynamoDB read/write helpers
+- `backend/src/handler.ts`: thin Lambda entrypoint that authenticates, resolves a route, and delegates
+- `backend/src/routes/`: one module per API endpoint so request flow stays easy to follow and modify
+- `backend/src/config/`: environment-derived backend configuration such as model IDs, limits, origins, and fetch settings
+- `backend/src/domain/`: shared backend domain types for auth, extraction, jobs, usage, and JSON payloads
+- `backend/src/http/`: HTTP-facing error and response helpers
+- `backend/src/parsing/`: pure request, HTML, model-response, and PDF text parsing helpers
+- `backend/src/providers/`: external integration adapters for Bedrock, Textract, fetch, browser-render fallback, and PDF parsing
+- `backend/src/repositories/`: focused DynamoDB access modules for API keys, jobs, usage, and shared key/client helpers
+- `backend/src/services/`: orchestration logic for auth and extraction workflows
 - `infra/cloudformation.yaml`: primary production stack
-- `infra/template.yaml`: older minimal stack
-- `scripts/`: build, deploy, smoke-test, and API key tooling
+- `infra/legacy-minimal.yaml`: older minimal stack kept for legacy parity only
+- `scripts/build/`: frontend and backend bundling entrypoints
+- `scripts/dev/`: one-off developer utilities such as API key creation
+- `scripts/test/`: live checks and smoke tests against deployed surfaces
+- `scripts/lib/`: shared script helpers such as runtime stack output resolution
+- `docs/adr/`: architecture decision records for choices that should not be rediscovered from code
+- `AGENTS.md`: repo-specific guidance for AI or human contributors making structural changes
 
 ## Local Build
 
@@ -89,6 +107,7 @@ npm run build:backend
 Build outputs:
 
 - `npm run build:frontend` writes `dist/frontend/app.js`, `dist/frontend/index.html`, and `dist/frontend/styles.css`
+- `npm run build:frontend` also copies `dist/frontend/styles/` for the imported CSS partials
 - `npm run build:backend` writes `dist/backend/index.js` and `dist/backend/index.js.map`
 
 ## Deployment Prerequisites
@@ -168,7 +187,7 @@ CloudFormation outputs published by the stack:
 - `HttpApiId`
 - `ApiUrl`
 
-The legacy template publishes `FrontendWebsiteUrl` and `BackendFunctionUrl` instead of `FrontendUrl` and `ApiUrl`.
+The legacy template at `infra/legacy-minimal.yaml` publishes `FrontendWebsiteUrl` and `BackendFunctionUrl` instead of `FrontendUrl` and `ApiUrl`.
 
 ## DNS Setup
 
@@ -214,8 +233,8 @@ What it does:
 
 Relevant files:
 
-- [scripts/create-api-key.ts](/Users/basilsergius/projects/extractkit/scripts/create-api-key.ts)
-- [scripts/run-create-api-key.mjs](/Users/basilsergius/projects/extractkit/scripts/run-create-api-key.mjs)
+- [scripts/dev/create-api-key.ts](/Users/basilsergius/projects/extractkit/scripts/dev/create-api-key.ts)
+- [scripts/dev/run-create-api-key.mjs](/Users/basilsergius/projects/extractkit/scripts/dev/run-create-api-key.mjs)
 
 The backend authenticates by hashing the presented bearer token and looking up:
 
@@ -267,16 +286,19 @@ Example `POST /v1/extract` request:
 
 ```json
 {
-  "content": "companyName: Acme Inc\ncontactEmail: hello@acme.com\nprice: $1,200.50\nactive: yes\nlaunchedOn: March 4, 2025\ntags: alpha, beta\nscores: 10, 20, 30\nwebsite: https://acme.com",
+  "content": "Account summary for Acme Inc. Primary contact is hello@acme.com. Website is https://acme.com. The company launched on March 4, 2025. It is active. Tags include alpha and beta. Recent scores were 10, 20, and 30.",
   "schema": {
-    "companyName": "string",
-    "contactEmail": "email",
-    "price": "number",
-    "active": "boolean",
-    "launchedOn": "date",
-    "tags": "array:string",
-    "scores": "array:number",
-    "website": "url"
+    "company": {
+      "name": "string",
+      "contact": {
+        "email": "string"
+      },
+      "website": "string",
+      "launchedOn": "string",
+      "active": "boolean",
+      "tags": ["string"],
+      "scores": ["number"]
+    }
   },
   "options": {
     "mode": "sync",
@@ -351,11 +373,12 @@ Example `POST /v1/extract-pdf` request:
 
 ```json
 {
-  "pdfUrl": "https://example.com/file.pdf",
+  "pdfUrl": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
   "schema": {
-    "invoiceNumber": "string",
-    "totalAmount": "number",
-    "vendorEmail": "email"
+    "document": {
+      "title": "string",
+      "firstLine": "string"
+    }
   }
 }
 ```
@@ -367,7 +390,16 @@ Example `POST /v1/extract-pdf` response:
   "ok": true,
   "data": {
     "jobId": "pdf_...",
-    "status": "queued"
+    "data": {
+      "document": {
+        "title": "Dummy PDF",
+        "firstLine": "Dummy PDF file"
+      }
+    },
+    "confidence": 0.82,
+    "usage": {
+      "units": 1
+    }
   }
 }
 ```
@@ -425,39 +457,33 @@ What this table currently stores:
 
 `POST /v1/extract` currently:
 
-- reads keys from the provided schema
-- extracts obvious `key: value` pairs
-- detects emails, numbers, prices, URLs, booleans, and date-like strings
-- coerces supported field types without external validation libraries
+- sends the request to Amazon Nova Micro through Bedrock
+- accepts any non-empty JSON object as the extraction schema, including nested objects and arrays
+- returns the model's JSON output directly instead of coercing against a fixed flat type list
 - stores the job and result in DynamoDB
 - increments monthly usage by 1 unit
-
-Supported schema field types:
-
-- `string`
-- `number`
-- `boolean`
-- `date`
-- `email`
-- `url`
-- `array:string`
-- `array:number`
 
 `POST /v1/extract-url` currently:
 
 - fetches the target URL with a 10 second timeout
 - rejects responses larger than 1,000,000 bytes
+- uses browser-like `User-Agent`, `Accept`, `Accept-Language`, and navigation-style request headers
 - strips noisy HTML like `script`, `style`, `nav`, `footer`, and `svg`
 - converts remaining HTML into rough readable text
-- applies lightweight HTML-aware fallbacks for title, description, and URL-like fields
+- sends the readable page content plus page hints to Amazon Nova Micro
+- can retry through a configured browser-render endpoint when direct fetches are blocked with statuses like `403` or `429`
 
 `POST /v1/extract-pdf` currently:
 
 - validates `pdfUrl`
 - validates the schema
-- creates a queued job item
-- returns immediately
-- does not parse the PDF yet
+- downloads the PDF directly
+- attempts native per-page PDF text extraction first
+- selectively renders and OCRs weak/scanned pages with Textract for hybrid PDFs
+- falls back to full-document Textract OCR when the PDF appears fully scanned or native extraction fails
+- sends the extracted text to Amazon Nova Micro for schema-based extraction
+- stores the completed job and result synchronously
+- currently relies on Textract's synchronous PDF path, so large PDFs over the synchronous limit will fail
 
 ## Verify Deployment
 
@@ -503,8 +529,8 @@ npm run test:live-smoke
 
 Based on the current repo state, the next high-value priorities are:
 
-1. Implement real extraction beyond mock `key: value` parsing, including better confidence and validation behavior.
-2. Finish the async PDF pipeline so queued jobs are actually processed and written back with results.
+1. Improve extraction confidence scoring and add richer debug traces for Nova Micro responses and schema-shape adherence.
+2. Add chunking, large-file handling, and richer OCR/layout handling for complex PDFs.
 3. Add local development ergonomics such as a local app server, local API run mode, and a lightweight automated test loop.
 4. Tighten auth and tenant controls around API keys, plan enforcement, rate limits, and disabled-key handling.
 5. Expand observability with structured logs, failure visibility, and clearer job lifecycle metrics.
