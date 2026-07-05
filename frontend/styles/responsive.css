@@ -2,6 +2,8 @@
   .hero,
   .api-grid,
   .cards-grid,
+  .stats-grid,
+  .stats-panels,
   .pricing-grid,
   .docs-grid,
   .panel-grid,
@@ -37,7 +39,9 @@
   }
 
   .usage-metrics,
-  .dashboard-grid {
+  .dashboard-grid,
+  .endpoint-row,
+  .stat-line {
     grid-template-columns: 1fr;
   }
 
@@ -47,5 +51,10 @@
 
   .topnav {
     gap: 12px;
+  }
+
+  .endpoint-row strong,
+  .stat-line strong {
+    justify-self: start;
   }
 }

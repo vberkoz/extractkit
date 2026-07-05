@@ -3,8 +3,22 @@ import { getWorkspacePanels } from "./selectors";
 import { WorkspaceTabOptions } from "./types";
 
 // Coordinates tab state for the live workspace after the page shell is mounted.
-export function initWorkspaceTabs(options: WorkspaceTabOptions): void {
+export function initWorkspaceTabs(options: WorkspaceTabOptions): () => void {
   const workspacePanels = getWorkspacePanels();
+  const onHashChange = () => {
+    const nextTab = getTabFromHash(window.location.hash);
+
+    if (!nextTab) {
+      return;
+    }
+
+    activateTab(nextTab, {
+      workspacePanels,
+      updateHash: false,
+      scrollPanelIntoView: false,
+      onTabActivated: options.onTabActivated
+    });
+  };
 
   for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>("[data-tab]"))) {
     button.id = `tab-${button.dataset.tab}`;
@@ -18,20 +32,7 @@ export function initWorkspaceTabs(options: WorkspaceTabOptions): void {
     });
   }
 
-  window.addEventListener("hashchange", () => {
-    const nextTab = getTabFromHash(window.location.hash);
-
-    if (!nextTab) {
-      return;
-    }
-
-    activateTab(nextTab, {
-      workspacePanels,
-      updateHash: false,
-      scrollPanelIntoView: false,
-      onTabActivated: options.onTabActivated
-    });
-  });
+  window.addEventListener("hashchange", onHashChange);
 
   activateTab(getTabFromHash(window.location.hash) ?? options.defaultTab, {
     workspacePanels,
@@ -39,6 +40,10 @@ export function initWorkspaceTabs(options: WorkspaceTabOptions): void {
     scrollPanelIntoView: false,
     onTabActivated: options.onTabActivated
   });
+
+  return () => {
+    window.removeEventListener("hashchange", onHashChange);
+  };
 }
 
 function activateTab(
@@ -84,6 +89,7 @@ function getTabFromHash(hash: string): TabId | null {
   if (
     normalized === "text-extract"
     || normalized === "url-extract"
+    || normalized === "pdf-extract"
     || normalized === "usage"
     || normalized === "docs"
   ) {

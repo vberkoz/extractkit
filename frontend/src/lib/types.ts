@@ -1,4 +1,11 @@
-export type TabId = "text-extract" | "url-extract" | "usage" | "docs";
+export type TabId =
+  | "text-extract"
+  | "url-extract"
+  | "pdf-extract"
+  | "usage"
+  | "docs";
+
+export type AppRoute = "home" | "stats";
 
 export type ApiSuccess<T> = {
   ok: true;
