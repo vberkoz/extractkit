@@ -1,5 +1,11 @@
 import {
   DetectDocumentTextCommand,
+  GetDocumentTextDetectionCommand,
+  type GetDocumentTextDetectionCommandOutput,
+  type DocumentMetadata,
+  type JobStatus,
+  type NotificationChannel,
+  StartDocumentTextDetectionCommand,
   TextractClient,
   type Block
 } from "@aws-sdk/client-textract";
@@ -19,4 +25,13 @@ export function getTextractClient(): TextractClient {
   return textractClient;
 }
 
-export { Block, DetectDocumentTextCommand };
+export {
+  Block,
+  DetectDocumentTextCommand,
+  GetDocumentTextDetectionCommand,
+  type GetDocumentTextDetectionCommandOutput,
+  type DocumentMetadata,
+  type JobStatus,
+  type NotificationChannel,
+  StartDocumentTextDetectionCommand
+};

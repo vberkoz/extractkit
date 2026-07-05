@@ -25,6 +25,7 @@ export function initUrlExtractFeature(callApi: <T>(
 
     await runAction({
       button: elements.submitButton,
+      buttonLabel: "Extract URL",
       statusEl: elements.status,
       resultEl: elements.result,
       idleMessage: "Run a URL extraction to see the response.",

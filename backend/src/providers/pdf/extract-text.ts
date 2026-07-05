@@ -9,11 +9,15 @@ import { extractDocumentTextWithTextract } from "../textract/extract-text";
 
 let pdfParseConstructorPromise: Promise<PdfParseConstructor> | null = null;
 
-export async function extractPdfTextIntelligently(pdfBytes: Uint8Array): Promise<string> {
+export async function extractPdfTextIntelligently(
+  pdfBytes: Uint8Array
+): Promise<string> {
   const nativePages = await tryExtractPdfTextNatively(pdfBytes);
 
   if (nativePages === null || nativePages.length === 0) {
-    return await extractDocumentTextWithTextract(pdfBytes);
+    return await extractDocumentTextWithTextract(pdfBytes, {
+      mimeType: "application/pdf"
+    });
   }
 
   const weakPages = nativePages.filter((page) => !isUsableNativePdfText(page.text));
@@ -23,7 +27,9 @@ export async function extractPdfTextIntelligently(pdfBytes: Uint8Array): Promise
   }
 
   if (weakPages.length === nativePages.length) {
-    return await extractDocumentTextWithTextract(pdfBytes);
+    return await extractDocumentTextWithTextract(pdfBytes, {
+      mimeType: "application/pdf"
+    });
   }
 
   try {
@@ -35,24 +41,31 @@ export async function extractPdfTextIntelligently(pdfBytes: Uint8Array): Promise
       weakPageCount: weakPages.length,
       totalPages: nativePages.length
     });
-    return await extractDocumentTextWithTextract(pdfBytes);
+    return await extractDocumentTextWithTextract(pdfBytes, {
+      mimeType: "application/pdf"
+    });
   }
 }
 
 async function getPdfParseConstructor(): Promise<PdfParseConstructor> {
   if (!pdfParseConstructorPromise) {
     pdfParseConstructorPromise = import("pdf-parse")
-      .then((module) => module.PDFParse as PdfParseConstructor);
+      .then((module) => module.PDFParse as PdfParseConstructor)
+      .catch((error) => {
+        pdfParseConstructorPromise = null;
+        throw error;
+      });
   }
 
   return await pdfParseConstructorPromise;
 }
 
 async function tryExtractPdfTextNatively(pdfBytes: Uint8Array): Promise<PdfPageText[] | null> {
-  const PDFParse = await getPdfParseConstructor();
-  const parser = new PDFParse({ data: Buffer.from(pdfBytes) });
+  let parser: InstanceType<PdfParseConstructor> | null = null;
 
   try {
+    const PDFParse = await getPdfParseConstructor();
+    parser = new PDFParse({ data: Buffer.from(pdfBytes) });
     const result = await parser.getText({
       imageBuffer: false,
       imageDataUrl: false,
@@ -70,7 +83,7 @@ async function tryExtractPdfTextNatively(pdfBytes: Uint8Array): Promise<PdfPageT
     });
     return null;
   } finally {
-    await parser.destroy();
+    await parser?.destroy();
   }
 }
 
@@ -79,11 +92,12 @@ async function extractHybridPdfText(
   nativePages: PdfPageText[],
   weakPages: PdfPageText[]
 ): Promise<PdfPageText[]> {
-  const PDFParse = await getPdfParseConstructor();
-  const parser = new PDFParse({ data: Buffer.from(pdfBytes) });
   const weakPageNumbers = new Set(weakPages.map((page) => page.pageNumber));
+  let parser: InstanceType<PdfParseConstructor> | null = null;
 
   try {
+    const PDFParse = await getPdfParseConstructor();
+    parser = new PDFParse({ data: Buffer.from(pdfBytes) });
     const mergedPages: PdfPageText[] = [];
 
     for (const page of nativePages) {
@@ -106,7 +120,9 @@ async function extractHybridPdfText(
       }
 
       const ocrText = normalizePdfPageText(
-        await extractDocumentTextWithTextract(screenshot.data)
+        await extractDocumentTextWithTextract(screenshot.data, {
+          mimeType: "image/png"
+        })
       );
 
       mergedPages.push({
@@ -117,6 +133,6 @@ async function extractHybridPdfText(
 
     return mergedPages;
   } finally {
-    await parser.destroy();
+    await parser?.destroy();
   }
 }

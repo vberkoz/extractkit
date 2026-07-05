@@ -29,6 +29,16 @@ export const BEDROCK_REGION =
 export const NOVA_MICRO_MODEL_ID =
   process.env.EXTRACTKIT_EXTRACT_MODEL_ID ?? "amazon.nova-micro-v1:0";
 
+export function getFilesBucketName(): string {
+  const bucketName = process.env.EXTRACTKIT_FILES_BUCKET_NAME?.trim();
+
+  if (!bucketName) {
+    throw new Error("Missing EXTRACTKIT_FILES_BUCKET_NAME environment variable.");
+  }
+
+  return bucketName;
+}
+
 export function getTableName(): string {
   const tableName = process.env.EXTRACTKIT_TABLE_NAME;
 

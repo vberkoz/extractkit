@@ -13,6 +13,7 @@ export async function runPendingState(
 
 export async function runAction(options: {
   button: HTMLButtonElement;
+  buttonLabel: string;
   statusEl: HTMLElement;
   resultEl: HTMLElement;
   idleMessage: string;
@@ -33,8 +34,7 @@ export async function runAction(options: {
     setStatus(options.statusEl, getErrorMessage(error), "error");
   } finally {
     options.button.disabled = false;
-    options.button.textContent =
-      options.button.id === "extract-url" ? "Extract URL" : "Extract";
+    options.button.textContent = options.buttonLabel;
     ensureIdleMessage(options.resultEl, options.idleMessage);
   }
 }

@@ -17,3 +17,13 @@ export const DEFAULT_URL_SCHEMA = JSON.stringify(
   null,
   2
 );
+
+export const DEFAULT_PDF_SCHEMA = JSON.stringify(
+  {
+    documentTitle: "string",
+    invoiceNumber: "string",
+    totalAmount: "number"
+  },
+  null,
+  2
+);

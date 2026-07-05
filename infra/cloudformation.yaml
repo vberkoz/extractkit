@@ -294,6 +294,8 @@ Resources:
                 Effect: Allow
                 Action:
                   - textract:DetectDocumentText
+                  - textract:StartDocumentTextDetection
+                  - textract:GetDocumentTextDetection
                 Resource: "*"
       Tags:
         - Key: Project

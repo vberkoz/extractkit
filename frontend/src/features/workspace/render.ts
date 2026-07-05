@@ -1,3 +1,4 @@
+import { renderPdfExtractPanel } from "../pdf-extract/render";
 import { API_BASE_URL } from "../../config/runtime";
 import { renderDocsPanel } from "../docs/render";
 import { renderTextExtractPanel } from "../text-extract/render";
@@ -19,7 +20,7 @@ export function renderWorkspaceSection(): string {
         <div class="workspace-header">
           <div>
             <p class="workspace-kicker">Live workspace</p>
-            <h3>Text, URL, usage, and docs</h3>
+            <h3>Text, URL, PDF, usage, and docs</h3>
           </div>
           <div class="workspace-badges">
             <span class="badge">Plain CSS</span>
@@ -31,6 +32,7 @@ export function renderWorkspaceSection(): string {
         <div class="tabs" role="tablist" aria-label="ExtractKit sections">
           <button class="tab-button is-active" type="button" role="tab" aria-selected="true" data-tab="text-extract">Text Extract</button>
           <button class="tab-button" type="button" role="tab" aria-selected="false" data-tab="url-extract">URL Extract</button>
+          <button class="tab-button" type="button" role="tab" aria-selected="false" data-tab="pdf-extract">PDF Extract</button>
           <button class="tab-button" type="button" role="tab" aria-selected="false" data-tab="usage">Usage</button>
           <button class="tab-button" type="button" role="tab" aria-selected="false" data-tab="docs">Docs</button>
         </div>
@@ -38,6 +40,7 @@ export function renderWorkspaceSection(): string {
         <div id="workspace-panels" class="panel-stack">
           ${renderTextExtractPanel()}
           ${renderUrlExtractPanel()}
+          ${renderPdfExtractPanel()}
           ${renderUsagePanel(API_BASE_URL)}
           ${renderDocsPanel()}
         </div>
