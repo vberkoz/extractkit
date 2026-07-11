@@ -1,5 +1,5 @@
 import type { JsonValue } from "../domain/json";
-import { isJsonValue } from "./common";
+import { isJsonValue } from "./json-value";
 
 export function getConverseTextResponse(
   contentBlocks: Array<{ text?: string | null } | null | undefined> | undefined

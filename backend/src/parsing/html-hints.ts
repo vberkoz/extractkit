@@ -1,47 +1,5 @@
 import type { HtmlExtractionHints } from "../domain/extraction";
 
-export function htmlToReadableText(html: string): string {
-  const withoutIgnoredTags = stripHtmlTags(html, ["script", "style", "nav", "footer", "svg"]);
-  const withBlockBreaks = withoutIgnoredTags
-    .replace(/<(?:br|hr)\s*\/?>/gi, "\n")
-    .replace(/<\/(?:p|div|section|article|main|aside|header|li|ul|ol|h[1-6]|table|tr)>/gi, "\n");
-  const withoutTags = withBlockBreaks.replace(/<[^>]+>/g, " ");
-  const decoded = decodeBasicHtmlEntities(withoutTags);
-
-  return decoded
-    .replace(/\r/g, "")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n[ \t]+/g, "\n")
-    .replace(/[ \t]{2,}/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
-export function extractHtmlHints(html: string, sourceUrl: string): HtmlExtractionHints {
-  return {
-    title: extractTagText(html, "title"),
-    metaDescription: extractMetaContent(html, "description"),
-    sourceUrl
-  };
-}
-
-function stripHtmlTags(html: string, tagNames: string[]): string {
-  let result = html;
-
-  for (const tagName of tagNames) {
-    const pairPattern = new RegExp(
-      `<${tagName}\\b[^>]*>[\\s\\S]*?<\\/${tagName}>`,
-      "gi"
-    );
-    const selfClosingPattern = new RegExp(`<${tagName}\\b[^>]*\\/?>`, "gi");
-
-    result = result.replace(pairPattern, " ");
-    result = result.replace(selfClosingPattern, " ");
-  }
-
-  return result;
-}
-
 function decodeBasicHtmlEntities(value: string): string {
   return value
     .replace(/&nbsp;/gi, " ")
@@ -108,4 +66,12 @@ function readHtmlAttribute(tag: string, attributeName: string): string | null {
   }
 
   return match[1] ?? match[2] ?? match[3] ?? null;
+}
+
+export function extractHtmlHints(html: string, sourceUrl: string): HtmlExtractionHints {
+  return {
+    title: extractTagText(html, "title"),
+    metaDescription: extractMetaContent(html, "description"),
+    sourceUrl
+  };
 }

@@ -3,14 +3,11 @@ import { uploadTemporaryPdf } from "../s3/upload-temporary-pdf";
 import {
   Block,
   DetectDocumentTextCommand,
-  GetDocumentTextDetectionCommand,
-  type GetDocumentTextDetectionCommandOutput,
   getTextractClient,
   StartDocumentTextDetectionCommand
 } from "./client";
-
-const TEXTRACT_POLL_INTERVAL_MS = 1_000;
-const TEXTRACT_MAX_POLL_ATTEMPTS = 20;
+import { buildTextFromTextractBlocks } from "./format";
+import { waitForDocumentTextDetection } from "./poll";
 
 type TextractDocumentOptions = {
   mimeType?: "application/pdf" | "image/png" | "image/jpeg";
@@ -107,81 +104,4 @@ async function uploadPdfForTextract(documentBytes: Uint8Array): Promise<Textract
     objectKey: upload.objectKey,
     cleanup: upload.cleanup
   };
-}
-
-async function waitForDocumentTextDetection(jobId: string): Promise<Block[]> {
-  for (let attempt = 0; attempt < TEXTRACT_MAX_POLL_ATTEMPTS; attempt += 1) {
-    const response = await getTextractClient().send(
-      new GetDocumentTextDetectionCommand({
-        JobId: jobId,
-        MaxResults: 1_000
-      })
-    );
-    const status = response.JobStatus;
-
-    if (status === "SUCCEEDED") {
-      return await getAllDocumentTextDetectionBlocks(jobId, response);
-    }
-
-    if (status === "FAILED" || status === "PARTIAL_SUCCESS") {
-      throw new Error(
-        response.StatusMessage
-        ?? `Textract job ended with status ${status ?? "UNKNOWN"}.`
-      );
-    }
-
-    await wait(TEXTRACT_POLL_INTERVAL_MS);
-  }
-
-  throw new Error("Textract document OCR timed out.");
-}
-
-async function getAllDocumentTextDetectionBlocks(
-  jobId: string,
-  firstResponse: GetDocumentTextDetectionCommandOutput
-): Promise<Block[]> {
-  const blocks = [...(firstResponse.Blocks ?? [])];
-  let nextToken = firstResponse.NextToken;
-
-  while (nextToken) {
-    const response = await getTextractClient().send(
-      new GetDocumentTextDetectionCommand({
-        JobId: jobId,
-        MaxResults: 1_000,
-        NextToken: nextToken
-      })
-    );
-
-    blocks.push(...(response.Blocks ?? []));
-    nextToken = response.NextToken;
-  }
-
-  return blocks;
-}
-
-function wait(durationMs: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, durationMs);
-  });
-}
-
-function buildTextFromTextractBlocks(blocks: Block[]): string {
-  const linesByPage = new Map<number, string[]>();
-
-  for (const block of blocks) {
-    if (block.BlockType !== "LINE" || !block.Text) {
-      continue;
-    }
-
-    const page = block.Page ?? 1;
-    const lines = linesByPage.get(page) ?? [];
-    lines.push(block.Text);
-    linesByPage.set(page, lines);
-  }
-
-  return Array.from(linesByPage.entries())
-    .sort(([left], [right]) => left - right)
-    .map(([page, lines]) => [`Page ${page}`, ...lines].join("\n"))
-    .join("\n\n")
-    .trim();
 }

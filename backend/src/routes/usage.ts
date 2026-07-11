@@ -3,10 +3,7 @@ import type { AuthContext } from "../domain/auth";
 import type { UsageResponse } from "../domain/usage";
 import { ok } from "../http/responses";
 import { getUsage } from "../repositories/usage-repo";
-import {
-  getCurrentUsagePeriod,
-  getPlanUsageLimit
-} from "../services/extraction-service";
+import { getCurrentUsagePeriod, getPlanUsageLimit } from "../services/usage-service";
 
 export async function handleGetUsage(auth: AuthContext): Promise<APIGatewayProxyResultV2> {
   const month = getCurrentUsagePeriod();

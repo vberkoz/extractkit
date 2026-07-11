@@ -6,16 +6,14 @@ import {
 } from "../../config/env";
 import { HttpError } from "../../http/errors";
 import {
-  createUpstreamFetchError,
   isAbortError,
   readResponseBytesWithLimit
 } from "./common";
+import { createUpstreamFetchError } from "./errors";
+import { withAbortTimeout } from "./timeout";
 
 export async function fetchPdfBytes(url: string): Promise<Uint8Array> {
-  const abortController = new AbortController();
-  const timeout = setTimeout(() => {
-    abortController.abort();
-  }, FETCH_TIMEOUT_MS);
+  const { abortController, clear } = withAbortTimeout(FETCH_TIMEOUT_MS);
 
   try {
     const response = await fetch(url, {
@@ -45,6 +43,6 @@ export async function fetchPdfBytes(url: string): Promise<Uint8Array> {
 
     throw new HttpError(502, "UPSTREAM_FETCH_FAILED", "Failed to fetch PDF content.");
   } finally {
-    clearTimeout(timeout);
+    clear();
   }
 }

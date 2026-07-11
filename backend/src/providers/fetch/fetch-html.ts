@@ -6,17 +6,15 @@ import {
 import { HttpError } from "../../http/errors";
 import { tryBrowserRenderedFallback, shouldTryBrowserRenderFallback } from "./browser-render";
 import {
-  createUpstreamFetchError,
   isAbortError,
   readResponseTextWithLimit
 } from "./common";
+import { createUpstreamFetchError } from "./errors";
 import { buildBrowserLikeFetchHeaders } from "./headers";
+import { withAbortTimeout } from "./timeout";
 
 export async function fetchUrlHtml(url: string): Promise<string> {
-  const abortController = new AbortController();
-  const timeout = setTimeout(() => {
-    abortController.abort();
-  }, FETCH_TIMEOUT_MS);
+  const { abortController, clear } = withAbortTimeout(FETCH_TIMEOUT_MS);
 
   try {
     const response = await fetch(url, {
@@ -56,6 +54,6 @@ export async function fetchUrlHtml(url: string): Promise<string> {
 
     throw new HttpError(502, "UPSTREAM_FETCH_FAILED", "Failed to fetch URL content.");
   } finally {
-    clearTimeout(timeout);
+    clear();
   }
 }

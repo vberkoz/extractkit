@@ -1,55 +1,12 @@
-import type { APIGatewayProxyEventV2 } from "aws-lambda";
-import {
-  ExtractPdfRequest,
-  ExtractRequest,
-  ExtractUrlRequest
-} from "../domain/extraction";
+import type { ExtractPdfRequest, ExtractRequest, ExtractUrlRequest } from "../domain/extraction";
 import type { JsonValue } from "../domain/json";
 import { HttpError } from "../http/errors";
+import { isRecord } from "./common";
 import {
   addFieldError,
   hasFieldErrors,
-  isRecord,
   withOptionalFieldErrors
-} from "./common";
-
-export function parseJsonBody(event: APIGatewayProxyEventV2): Record<string, JsonValue> {
-  if (!event.body) {
-    throw new HttpError(400, "INVALID_REQUEST", "Request body is required.");
-  }
-
-  const rawBody = event.isBase64Encoded
-    ? Buffer.from(event.body, "base64").toString("utf8")
-    : event.body;
-
-  let parsed: unknown;
-
-  try {
-    parsed = JSON.parse(rawBody);
-  } catch {
-    throw new HttpError(400, "INVALID_JSON", "Request body must be valid JSON.");
-  }
-
-  if (!isRecord(parsed)) {
-    throw new HttpError(400, "INVALID_REQUEST", "Request body must be a JSON object.");
-  }
-
-  return parsed;
-}
-
-export function getRequiredString(body: Record<string, JsonValue>, key: string): string {
-  const value = body[key];
-
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new HttpError(
-      400,
-      "INVALID_REQUEST",
-      `Request body field '${key}' must be a non-empty string.`
-    );
-  }
-
-  return value;
-}
+} from "./field-errors";
 
 export function parseExtractRequest(body: Record<string, JsonValue>): ExtractRequest {
   const debugEnabled = getDebugMode(body);
@@ -170,13 +127,28 @@ export function parseExtractPdfRequest(body: Record<string, JsonValue>): Extract
   };
 }
 
+function getRequiredString(body: Record<string, JsonValue>, key: string): string {
+  const value = body[key];
+
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new HttpError(
+      400,
+      "INVALID_REQUEST",
+      `Request body field '${key}' must be a non-empty string.`
+    );
+  }
+
+  return value;
+}
+
 function parseExtractConfig(
   body: Record<string, JsonValue>,
   debugEnabled: boolean
 ): Omit<ExtractRequest, "content"> {
   const schemaValue = body.schema;
+  const schemaRecord = isRecord(schemaValue) ? schemaValue : null;
 
-  if (!isRecord(schemaValue) || Object.keys(schemaValue).length === 0) {
+  if (!schemaRecord || Object.keys(schemaRecord).length === 0) {
     throw withOptionalFieldErrors(
       400,
       "INVALID_REQUEST",
@@ -189,8 +161,9 @@ function parseExtractConfig(
   }
 
   const optionsValue = body.options;
+  const optionsRecord = isRecord(optionsValue) ? optionsValue : null;
 
-  if (optionsValue !== undefined && !isRecord(optionsValue)) {
+  if (optionsValue !== undefined && !optionsRecord) {
     throw withOptionalFieldErrors(
       400,
       "INVALID_REQUEST",
@@ -202,17 +175,17 @@ function parseExtractConfig(
     );
   }
 
-  const modeValue = optionsValue?.mode;
+  const modeValue = optionsRecord?.mode;
   const mode = modeValue === "sync" ? modeValue : undefined;
   const debugOption =
-    typeof optionsValue?.debug === "boolean" ? optionsValue.debug : undefined;
+    typeof optionsRecord?.debug === "boolean" ? optionsRecord.debug : undefined;
   const optionsErrors: Record<string, string[]> = {};
 
   if (modeValue !== undefined && mode === undefined) {
     addFieldError(optionsErrors, "options.mode", "Mode must be 'sync'.");
   }
 
-  if (optionsValue?.debug !== undefined && debugOption === undefined) {
+  if (optionsRecord?.debug !== undefined && debugOption === undefined) {
     addFieldError(optionsErrors, "options.debug", "Debug must be a boolean.");
   }
 
@@ -227,7 +200,7 @@ function parseExtractConfig(
   }
 
   return {
-    schema: schemaValue,
+    schema: schemaRecord as Record<string, JsonValue>,
     options:
       mode !== undefined || debugOption !== undefined
         ? {
@@ -239,9 +212,11 @@ function parseExtractConfig(
 }
 
 function getDebugMode(body: Record<string, JsonValue>): boolean {
-  if (!isRecord(body.options)) {
+  const optionsRecord = isRecord(body.options) ? body.options : null;
+
+  if (!optionsRecord) {
     return false;
   }
 
-  return body.options.debug === true;
+  return optionsRecord.debug === true;
 }

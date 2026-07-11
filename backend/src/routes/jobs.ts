@@ -3,20 +3,15 @@ import type { AuthContext } from "../domain/auth";
 import type { GetJobResponse } from "../domain/jobs";
 import { HttpError } from "../http/errors";
 import { ok } from "../http/responses";
-import { normalizeJobStatus, normalizePath } from "../parsing/common";
+import { getJobIdFromPath } from "../parsing/job-path";
+import { normalizeJobStatus } from "../parsing/job-status";
 import { getJob, getJobResult } from "../repositories/jobs-repo";
 
 export async function handleGetJob(
   event: APIGatewayProxyEventV2,
   auth: AuthContext
 ): Promise<APIGatewayProxyResultV2> {
-  const path = normalizePath(event.rawPath);
-  const prefix = "/v1/jobs/";
-  const jobId = path.slice(prefix.length);
-
-  if (!jobId) {
-    throw new HttpError(400, "INVALID_JOB_ID", "Job ID is required.");
-  }
+  const jobId = getJobIdFromPath(event.rawPath);
 
   const job = await getJob(jobId);
 

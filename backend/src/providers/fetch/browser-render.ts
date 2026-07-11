@@ -8,6 +8,7 @@ import {
 import { HttpError } from "../../http/errors";
 import { isRecord } from "../../parsing/common";
 import { isAbortError, readResponseTextWithLimit } from "./common";
+import { withAbortTimeout } from "./timeout";
 
 export function shouldTryBrowserRenderFallback(status: number): boolean {
   return status === 401 || status === 403 || status === 406 || status === 429;
@@ -21,10 +22,7 @@ export async function tryBrowserRenderedFallback(
     return null;
   }
 
-  const abortController = new AbortController();
-  const timeout = setTimeout(() => {
-    abortController.abort();
-  }, BROWSER_RENDER_TIMEOUT_MS);
+  const { abortController, clear } = withAbortTimeout(BROWSER_RENDER_TIMEOUT_MS);
 
   try {
     const headers: Record<string, string> = {
@@ -105,6 +103,6 @@ export async function tryBrowserRenderedFallback(
       "Browser-render fallback failed."
     );
   } finally {
-    clearTimeout(timeout);
+    clear();
   }
 }

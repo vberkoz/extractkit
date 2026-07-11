@@ -1,6 +1,4 @@
-import {
-  type AuthContext
-} from "../domain/auth";
+import type { AuthContext } from "../domain/auth";
 import {
   type ExtractRequest,
   type ExtractResponse,
@@ -11,9 +9,10 @@ import type { JsonValue } from "../domain/json";
 import { HttpError } from "../http/errors";
 import { createJob, saveJobResult } from "../repositories/jobs-repo";
 import { incrementUsage } from "../repositories/usage-repo";
-import { createJobId } from "../parsing/common";
+import { createJobId } from "../parsing/job-id";
 import { extractStructuredJsonWithBedrock } from "../providers/bedrock/extract";
 import { ok } from "../http/responses";
+import { getCurrentUsagePeriod } from "./usage-service";
 
 export async function executeExtraction(input: {
   auth: AuthContext;
@@ -81,23 +80,5 @@ async function extractWithNovaMicro(
       "MODEL_INVOCATION_FAILED",
       "Amazon Nova Micro extraction failed."
     );
-  }
-}
-
-export function getCurrentUsagePeriod(): string {
-  const now = new Date();
-  const year = now.getUTCFullYear();
-  const month = String(now.getUTCMonth() + 1).padStart(2, "0");
-  return `${year}-${month}`;
-}
-
-export function getPlanUsageLimit(plan: string): number {
-  const normalizedPlan = plan.trim().toLowerCase();
-
-  switch (normalizedPlan) {
-    case "dev":
-      return 10_000;
-    default:
-      return 10_000;
   }
 }

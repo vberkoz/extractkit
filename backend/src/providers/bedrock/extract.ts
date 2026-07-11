@@ -4,6 +4,8 @@ import type { JsonValue } from "../../domain/json";
 import { getConverseTextResponse, parseJsonValueFromModelText } from "../../parsing/model-json";
 import { ConverseCommand, getBedrockRuntimeClient } from "./client";
 import { buildModelExtractionPrompt } from "./prompt";
+import { BEDROCK_EXTRACTION_INFERENCE_CONFIG } from "./inference";
+import { buildExtractionSystemPrompt } from "./system";
 
 export async function extractStructuredJsonWithBedrock(
   request: ExtractRequest,
@@ -15,12 +17,7 @@ export async function extractStructuredJsonWithBedrock(
       modelId,
       system: [
         {
-          text: [
-            "You extract structured data from user-provided content.",
-            "Return only valid JSON matching the provided schema shape as closely as possible.",
-            "Use null when a value is missing or not supported by the content.",
-            "Do not include markdown fences or explanatory text."
-          ].join(" ")
+          text: buildExtractionSystemPrompt()
         }
       ],
       messages: [
@@ -33,10 +30,7 @@ export async function extractStructuredJsonWithBedrock(
           ]
         }
       ],
-      inferenceConfig: {
-        maxTokens: 1200,
-        temperature: 0
-      }
+      inferenceConfig: BEDROCK_EXTRACTION_INFERENCE_CONFIG
     })
   );
   const text = getConverseTextResponse(response.output?.message?.content);

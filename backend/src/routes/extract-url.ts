@@ -1,8 +1,10 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from "aws-lambda";
 import type { AuthContext } from "../domain/auth";
 import { HttpError } from "../http/errors";
-import { extractHtmlHints, htmlToReadableText } from "../parsing/html";
-import { parseExtractUrlRequest, parseJsonBody } from "../parsing/request";
+import { extractHtmlHints } from "../parsing/html-hints";
+import { htmlToReadableText } from "../parsing/html-text";
+import { parseExtractUrlRequest } from "../parsing/extract-request";
+import { parseJsonBody } from "../parsing/body";
 import { fetchUrlHtml } from "../providers/fetch/fetch-html";
 import { executeExtraction } from "../services/extraction-service";
 

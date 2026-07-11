@@ -1,10 +1,12 @@
 import type { PdfPageText, PdfParseConstructor } from "../../domain/pdf";
 import {
-  isUsableNativePdfText,
   joinPdfPages,
-  normalizePdfPageText,
+  normalizePdfPageText
+} from "../../parsing/pdf-normalize";
+import {
+  isUsableNativePdfText,
   pickPreferredPdfPageText
-} from "../../parsing/pdf-text";
+} from "../../parsing/pdf-quality";
 import { extractDocumentTextWithTextract } from "../textract/extract-text";
 
 let pdfParseConstructorPromise: Promise<PdfParseConstructor> | null = null;

@@ -11,9 +11,13 @@ import {
   dynamo,
   DynamoRecord,
   jobPk,
-  userJobSk,
   userPk
 } from "./dynamo-client";
+import {
+  buildJobRecord,
+  buildJobResultRecord,
+  buildUserJobItem
+} from "./jobs-records";
 
 export type JobRecord = DynamoRecord & {
   PK: string;
@@ -50,23 +54,8 @@ export type CreateJobInput = DynamoRecord & {
 };
 
 export async function createJob(job: CreateJobInput): Promise<void> {
-  const jobItem: JobRecord = {
-    PK: jobPk(job.jobId),
-    SK: "METADATA",
-    entityType: "JOB",
-    ...job
-  };
-
-  const userJobItem: UserJobItem = {
-    ...job,
-    PK: userPk(job.userId),
-    SK: userJobSk(job.createdAt, job.jobId),
-    entityType: "USER_JOB",
-    jobId: job.jobId,
-    userId: job.userId,
-    createdAt: job.createdAt,
-    status: job.status
-  };
+  const jobItem: JobRecord = buildJobRecord(job);
+  const userJobItem: UserJobItem = buildUserJobItem(job);
 
   await dynamo.send(
     new TransactWriteCommand({
@@ -122,14 +111,7 @@ export async function saveJobResult(
   jobId: string,
   result: JsonValue
 ): Promise<JobResultRecord> {
-  const item: JobResultRecord = {
-    PK: jobPk(jobId),
-    SK: "RESULT",
-    entityType: "JOB_RESULT",
-    jobId,
-    result,
-    updatedAt: new Date().toISOString()
-  };
+  const item: JobResultRecord = buildJobResultRecord(jobId, result);
 
   await dynamo.send(
     new PutCommand({

@@ -1,7 +1,8 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from "aws-lambda";
 import type { AuthContext } from "../domain/auth";
 import { HttpError } from "../http/errors";
-import { parseExtractPdfRequest, parseJsonBody } from "../parsing/request";
+import { parseExtractPdfRequest } from "../parsing/extract-request";
+import { parseJsonBody } from "../parsing/body";
 import { fetchPdfBytes } from "../providers/fetch/fetch-pdf";
 import { extractPdfTextIntelligently } from "../providers/pdf/extract-text";
 import { executeExtraction } from "../services/extraction-service";

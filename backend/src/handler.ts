@@ -4,7 +4,7 @@ import type {
   Handler
 } from "aws-lambda";
 import { handleError, noContent } from "./http/responses";
-import { normalizePath } from "./parsing/common";
+import { normalizePath } from "./parsing/path";
 import { resolveRoute } from "./routes";
 import { authenticateRequest } from "./services/auth-service";
 

@@ -1,0 +1,20 @@
+import { scanAllItems } from "./dynamo-scan";
+import { buildStatsSnapshot, type StatsItem } from "./stats-aggregation";
+
+export async function getStatsSnapshot() {
+  const items = await scanAllItems<StatsItem>(
+    "#entityType, #jobId, #createdAt, #disabled, #amount, #yyyyMM, #result, #sk",
+    {
+      "#amount": "amount",
+      "#createdAt": "createdAt",
+      "#disabled": "disabled",
+      "#entityType": "entityType",
+      "#jobId": "jobId",
+      "#result": "result",
+      "#sk": "SK",
+      "#yyyyMM": "yyyyMM"
+    }
+  );
+  const generatedAt = new Date().toISOString();
+  return buildStatsSnapshot(items, generatedAt);
+}
