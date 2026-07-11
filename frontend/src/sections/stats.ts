@@ -6,36 +6,36 @@ export function renderStatsSection(): string {
           <p class="eyebrow">analytics</p>
           <h1>General stats for the product surface</h1>
           <p class="section-copy">
-            A dedicated route for analytics, health, and growth metrics. This page is ready for real data later, but it already gives the product its own URL and navigation.
+            A dedicated route for analytics, health, and growth metrics. These numbers are pulled from the live DynamoDB table that powers jobs, usage, and API keys.
           </p>
         </div>
 
         <div class="stats-actions">
           <a class="button button-primary" href="/#demo">Back to demo</a>
-          <a class="button button-secondary" href="/#api">View API examples</a>
         </div>
+        <p id="stats-status" class="status" aria-live="polite">Loading live stats...</p>
       </section>
 
       <section class="stats-grid">
         <article class="panel stat-card stat-card-accent">
           <span class="stat-label">Requests today</span>
-          <strong>1,284</strong>
-          <span class="stat-note">+12.4% from yesterday</span>
+          <strong id="stats-requests-today">-</strong>
+          <span class="stat-note">Successful jobs created today</span>
         </article>
         <article class="panel stat-card">
           <span class="stat-label">Success rate</span>
-          <strong>99.9%</strong>
-          <span class="stat-note">Stable across all extraction flows</span>
-        </article>
-        <article class="panel stat-card">
-          <span class="stat-label">Median latency</span>
-          <strong>240 ms</strong>
-          <span class="stat-note">Text and URL extraction combined</span>
+          <strong id="stats-success-rate">-</strong>
+          <span class="stat-note">Based on stored job records</span>
         </article>
         <article class="panel stat-card">
           <span class="stat-label">Active API keys</span>
-          <strong>48</strong>
-          <span class="stat-note">7 new keys this week</span>
+          <strong id="stats-active-api-keys">-</strong>
+          <span class="stat-note">Non-disabled keys in DynamoDB</span>
+        </article>
+        <article class="panel stat-card">
+          <span class="stat-label">Monthly usage units</span>
+          <strong id="stats-monthly-usage-units">-</strong>
+          <span class="stat-note">Summed from the current month</span>
         </article>
       </section>
 
@@ -48,18 +48,18 @@ export function renderStatsSection(): string {
           <div class="endpoint-bars" aria-label="Endpoint request mix">
             <div class="endpoint-row">
               <span>Text extract</span>
-              <div class="endpoint-bar"><span style="width: 56%"></span></div>
-              <strong>56%</strong>
+              <div class="endpoint-bar"><span id="stats-text-jobs-bar" style="width: 0%"></span></div>
+              <strong id="stats-text-jobs">-</strong>
             </div>
             <div class="endpoint-row">
               <span>URL extract</span>
-              <div class="endpoint-bar"><span style="width: 26%"></span></div>
-              <strong>26%</strong>
+              <div class="endpoint-bar"><span id="stats-url-jobs-bar" style="width: 0%"></span></div>
+              <strong id="stats-url-jobs">-</strong>
             </div>
             <div class="endpoint-row">
               <span>PDF extract</span>
-              <div class="endpoint-bar"><span style="width: 18%"></span></div>
-              <strong>18%</strong>
+              <div class="endpoint-bar"><span id="stats-pdf-jobs-bar" style="width: 0%"></span></div>
+              <strong id="stats-pdf-jobs">-</strong>
             </div>
           </div>
         </article>
@@ -71,20 +71,20 @@ export function renderStatsSection(): string {
           </div>
           <div class="stats-list">
             <div class="stat-line">
-              <span>Queued jobs</span>
-              <strong>4</strong>
+              <span>Total jobs stored</span>
+              <strong id="stats-total-jobs">-</strong>
             </div>
             <div class="stat-line">
-              <span>Failed jobs</span>
-              <strong>0</strong>
+              <span>Completed jobs today</span>
+              <strong id="stats-completed-jobs-today">-</strong>
             </div>
             <div class="stat-line">
-              <span>Usage checks today</span>
-              <strong>312</strong>
+              <span>Avg. result size</span>
+              <strong id="stats-average-result-size">-</strong>
             </div>
             <div class="stat-line">
-              <span>Avg. response size</span>
-              <strong>18 KB</strong>
+              <span>Last updated</span>
+              <strong id="stats-generated-at">-</strong>
             </div>
           </div>
         </article>

@@ -100,6 +100,10 @@
   scroll-margin-top: 96px;
 }
 
+.tab-panel[hidden] {
+  display: none !important;
+}
+
 .tab-panel.is-active {
   animation: panel-enter 220ms ease;
   border-color: var(--line-strong);

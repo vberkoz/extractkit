@@ -5,6 +5,7 @@ import { WorkspaceTabOptions } from "./types";
 // Coordinates tab state for the live workspace after the page shell is mounted.
 export function initWorkspaceTabs(options: WorkspaceTabOptions): () => void {
   const workspacePanels = getWorkspacePanels();
+  const tabButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-tab]"));
   const onHashChange = () => {
     const nextTab = getTabFromHash(window.location.hash);
 
@@ -15,19 +16,19 @@ export function initWorkspaceTabs(options: WorkspaceTabOptions): () => void {
     activateTab(nextTab, {
       workspacePanels,
       updateHash: false,
-      scrollPanelIntoView: false,
-      onTabActivated: options.onTabActivated
+      scrollPanelIntoView: false
     });
   };
 
-  for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>("[data-tab]"))) {
-    button.id = `tab-${button.dataset.tab}`;
+  for (const button of tabButtons) {
+    const tabId = button.dataset.tab as TabId;
+    button.id = `tab-${tabId}`;
+    button.setAttribute("aria-controls", `panel-${tabId}`);
     button.addEventListener("click", () => {
-      activateTab(button.dataset.tab as TabId, {
+      activateTab(tabId, {
         workspacePanels,
         updateHash: true,
-        scrollPanelIntoView: true,
-        onTabActivated: options.onTabActivated
+        scrollPanelIntoView: true
       });
     });
   }
@@ -37,8 +38,7 @@ export function initWorkspaceTabs(options: WorkspaceTabOptions): () => void {
   activateTab(getTabFromHash(window.location.hash) ?? options.defaultTab, {
     workspacePanels,
     updateHash: false,
-    scrollPanelIntoView: false,
-    onTabActivated: options.onTabActivated
+    scrollPanelIntoView: false
   });
 
   return () => {
@@ -52,13 +52,13 @@ function activateTab(
     workspacePanels: HTMLElement;
     updateHash: boolean;
     scrollPanelIntoView: boolean;
-    onTabActivated?: (tabId: TabId) => void;
   }
 ): void {
   for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>("[data-tab]"))) {
     const active = button.dataset.tab === tabId;
     button.classList.toggle("is-active", active);
     button.setAttribute("aria-selected", String(active));
+    button.tabIndex = active ? 0 : -1;
   }
 
   for (const panel of Array.from(document.querySelectorAll<HTMLElement>("[data-panel]"))) {
@@ -68,6 +68,7 @@ function activateTab(
   }
 
   options.workspacePanels.dataset.activeTab = tabId;
+  options.workspacePanels.setAttribute("aria-live", "off");
 
   if (options.updateHash) {
     window.history.replaceState(null, "", `#${tabId}`);
@@ -79,8 +80,6 @@ function activateTab(
       block: "start"
     });
   }
-
-  options.onTabActivated?.(tabId);
 }
 
 function getTabFromHash(hash: string): TabId | null {
@@ -90,8 +89,6 @@ function getTabFromHash(hash: string): TabId | null {
     normalized === "text-extract"
     || normalized === "url-extract"
     || normalized === "pdf-extract"
-    || normalized === "usage"
-    || normalized === "docs"
   ) {
     return normalized;
   }

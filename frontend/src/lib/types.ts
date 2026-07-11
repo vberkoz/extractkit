@@ -1,9 +1,7 @@
 export type TabId =
   | "text-extract"
   | "url-extract"
-  | "pdf-extract"
-  | "usage"
-  | "docs";
+  | "pdf-extract";
 
 export type AppRoute = "home" | "stats";
 
@@ -28,4 +26,20 @@ export type UsageData = {
   limit: number;
   plan: string;
   month: string;
+};
+
+export type StatsData = {
+  generatedAt: string;
+  requestsToday: number;
+  successRate: number;
+  activeApiKeys: number;
+  monthlyUsageUnits: number;
+  endpointMix: {
+    text: number;
+    url: number;
+    pdf: number;
+  };
+  totalJobs: number;
+  completedJobsToday: number;
+  averageResultSizeBytes: number;
 };

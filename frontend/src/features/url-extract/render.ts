@@ -1,6 +1,6 @@
 export function renderUrlExtractPanel(): string {
   return `
-    <section class="tab-panel" data-panel="url-extract" id="panel-url-extract" aria-labelledby="tab-url-extract" hidden>
+    <section class="tab-panel" data-panel="url-extract" id="panel-url-extract" role="tabpanel" aria-labelledby="tab-url-extract" hidden>
       <div class="tab-panel-header">
         <div class="tab-panel-heading">
           <p class="tab-panel-kicker">URL extract workspace</p>

@@ -112,6 +112,31 @@
   text-wrap: balance;
 }
 
+.hero.stats-hero {
+  grid-template-columns: 1fr;
+  align-items: start;
+}
+
+.hero.stats-hero h1 {
+  max-width: 12ch;
+  font-size: clamp(2.2rem, 4vw, 3.6rem);
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.hero.stats-hero .hero-actions {
+  margin-top: 2px;
+}
+
+.hero-metrics,
+.hero-panels {
+  width: 100%;
+}
+
+.hero-panels {
+  gap: 14px;
+}
+
 .lead {
   margin: 0;
   max-width: 52ch;

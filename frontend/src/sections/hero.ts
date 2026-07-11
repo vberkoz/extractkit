@@ -1,62 +1,91 @@
 export function renderHeroSection(): string {
   return `
-    <section id="hero" class="hero section-grid">
-      <div class="hero-copy panel panel-hero">
+    <section id="hero" class="hero stats-hero section-stack">
+      <div class="section-heading hero-heading">
         <p class="eyebrow">structured extraction for developer teams</p>
-        <h1>Ship extraction flows with a clean, inspectable client.</h1>
-        <p class="lead">
-          Test text extraction, fetch-and-extract from a URL, inspect usage, and copy request examples from one lightweight interface.
-        </p>
-        <div class="hero-actions">
-          <a class="button button-primary" href="#demo">Open live demo</a>
-          <a class="button button-secondary" href="#api">View API examples</a>
-        </div>
-        <label class="field field-inline">
-          <span class="field-label">API key</span>
-          <input id="api-key" class="text-input" type="password" placeholder="Paste your ExtractKit API key" autocomplete="off" />
-        </label>
-        <p class="microcopy">
-          Stored locally via <code>localStorage</code>. Live requests send <code>Authorization: Bearer ...</code>.
+        <h1>Ship extraction flows with the feel of an ops dashboard.</h1>
+        <p class="section-copy">
+          Test text, URL, and PDF extraction from one clean surface, with live usage visibility and local API key bootstrap running quietly in the background.
         </p>
       </div>
 
-      <aside class="hero-panel panel panel-dark" aria-label="Dashboard preview">
-        <div class="terminal-window">
-          <div class="terminal-bar">
-            <span></span>
-            <span></span>
-            <span></span>
+      <div class="stats-actions hero-actions">
+        <a class="button button-primary" href="#demo">Open live demo</a>
+      </div>
+
+      <section class="stats-grid hero-metrics" aria-label="Product highlights">
+        <article class="panel stat-card stat-card-accent">
+          <span class="stat-label">Extraction surfaces</span>
+          <strong>3</strong>
+          <span class="stat-note">Text, URL, and PDF workflows in one place</span>
+        </article>
+        <article class="panel stat-card">
+          <span class="stat-label">API routes</span>
+          <strong>4</strong>
+          <span class="stat-note">Extract, usage, stats, and bootstrap</span>
+        </article>
+        <article class="panel stat-card">
+          <span class="stat-label">Key handling</span>
+          <strong>1 click</strong>
+          <span class="stat-note">Saved to localStorage under the hood</span>
+        </article>
+        <article class="panel stat-card">
+          <span class="stat-label">Docs examples</span>
+          <strong>2</strong>
+          <span class="stat-note">Copy-ready request snippets for fast integration</span>
+        </article>
+      </section>
+
+      <section class="stats-panels hero-panels">
+        <article class="panel stats-panel">
+          <div class="panel-heading">
+            <p class="workspace-kicker">Traffic mix</p>
+            <h3>What the home surface covers</h3>
           </div>
-          <div class="terminal-body">
-            <p>POST /v1/extract</p>
-            <p class="terminal-dim">status: 200 OK</p>
-            <p>{</p>
-            <p>  "company": {</p>
-            <p>    "name": "Acme Inc",</p>
-            <p>    "website": "https://acme.com"</p>
-            <p>  }</p>
-            <p>}</p>
+          <div class="endpoint-bars" aria-label="Product surface mix">
+            <div class="endpoint-row">
+              <span>Text extract</span>
+              <div class="endpoint-bar"><span style="width: 100%"></span></div>
+              <strong>Ready</strong>
+            </div>
+            <div class="endpoint-row">
+              <span>URL extract</span>
+              <div class="endpoint-bar"><span style="width: 100%"></span></div>
+              <strong>Ready</strong>
+            </div>
+            <div class="endpoint-row">
+              <span>PDF extract</span>
+              <div class="endpoint-bar"><span style="width: 100%"></span></div>
+              <strong>Ready</strong>
+            </div>
           </div>
-        </div>
-        <div class="dashboard-grid">
-          <article class="mini-stat">
-            <span class="mini-label">Latency</span>
-            <strong>240ms</strong>
-          </article>
-          <article class="mini-stat">
-            <span class="mini-label">Success</span>
-            <strong>99.9%</strong>
-          </article>
-          <article class="mini-stat">
-            <span class="mini-label">Schema fields</span>
-            <strong>12</strong>
-          </article>
-          <article class="mini-stat">
-            <span class="mini-label">Requests today</span>
-            <strong>1,284</strong>
-          </article>
-        </div>
-      </aside>
+        </article>
+
+        <article class="panel stats-panel">
+          <div class="panel-heading">
+            <p class="workspace-kicker">Runtime</p>
+            <h3>Hidden setup, visible product</h3>
+          </div>
+          <div class="stats-list">
+            <div class="stat-line">
+              <span>API key bootstrap</span>
+              <strong>Automatic</strong>
+            </div>
+            <div class="stat-line">
+              <span>Storage</span>
+              <strong>localStorage</strong>
+            </div>
+            <div class="stat-line">
+              <span>Usage visibility</span>
+              <strong>Built in</strong>
+            </div>
+            <div class="stat-line">
+              <span>Stats route</span>
+              <strong>Live</strong>
+            </div>
+          </div>
+        </article>
+      </section>
     </section>
   `;
 }

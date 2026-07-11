@@ -1,6 +1,6 @@
 export function renderTextExtractPanel(): string {
   return `
-    <section class="tab-panel is-active" data-panel="text-extract" id="panel-text-extract" aria-labelledby="tab-text-extract">
+    <section class="tab-panel is-active" data-panel="text-extract" id="panel-text-extract" role="tabpanel" aria-labelledby="tab-text-extract">
       <div class="tab-panel-header">
         <div class="tab-panel-heading">
           <p class="tab-panel-kicker">Text extract workspace</p>

@@ -1,6 +1,6 @@
 export function renderPdfExtractPanel(): string {
   return `
-    <section class="tab-panel" data-panel="pdf-extract" id="panel-pdf-extract" aria-labelledby="tab-pdf-extract" hidden>
+    <section class="tab-panel" data-panel="pdf-extract" id="panel-pdf-extract" role="tabpanel" aria-labelledby="tab-pdf-extract" hidden>
       <div class="tab-panel-header">
         <div class="tab-panel-heading">
           <p class="tab-panel-kicker">PDF extract workspace</p>

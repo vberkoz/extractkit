@@ -9,9 +9,7 @@ export function renderHeader(route: AppRoute): string {
       </a>
       <nav class="topnav" aria-label="Primary">
         <a href="/#demo">Demo</a>
-        <a href="/#api">API</a>
         <a href="/#use-cases">Use cases</a>
-        <a href="/#pricing">Pricing</a>
         <a href="/stats" ${route === "stats" ? 'aria-current="page"' : ""}>Stats</a>
       </nav>
     </header>
