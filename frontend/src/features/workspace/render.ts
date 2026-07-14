@@ -7,9 +7,9 @@ export function renderWorkspaceSection(): string {
     <section id="demo" class="section-stack">
       <div class="section-heading">
         <p class="eyebrow">dashboard / demo panel</p>
-        <h2>Run the product from the page</h2>
+        <h2>See the raw input, the extracted JSON, and what changed.</h2>
         <p class="section-copy">
-          The live workspace keeps the three extraction modes intact while fitting into a cleaner product-facing layout.
+          The live workspace starts with runnable examples so visitors can compare the source and the output before they touch schema JSON.
         </p>
       </div>
 

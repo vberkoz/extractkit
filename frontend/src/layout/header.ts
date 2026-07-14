@@ -3,7 +3,7 @@ import { AppRoute } from "../lib/types";
 export function renderHeader(route: AppRoute): string {
   return `
     <header class="topbar">
-      <a class="brand" href="/#hero">
+      <a class="brand" href="/">
         <span class="brand-mark"></span>
         <span>ExtractKit</span>
       </a>

@@ -1,7 +1,9 @@
-import { DEFAULT_PDF_SCHEMA } from "../../config/defaults";
 import { setStatus } from "../../lib/dom";
 import { parseSchema } from "../../lib/schema";
+import { revealDemandFollowups } from "../demand-capture/controller";
 import { runAction } from "../workspace/shared/actions";
+import { bindWorkspaceExamplePicker } from "../workspace/examples";
+import { bindWorkspaceProofSnapshot, syncWorkspaceProofSnapshot } from "../workspace/proof";
 import { getPdfExtractElements } from "./selectors";
 
 export function initPdfExtractFeature(callApi: <T>(
@@ -12,8 +14,22 @@ export function initPdfExtractFeature(callApi: <T>(
   }
 ) => Promise<T>): void {
   const elements = getPdfExtractElements();
-
-  elements.schemaInput.value = DEFAULT_PDF_SCHEMA;
+  bindWorkspaceExamplePicker({
+    kind: "pdf",
+    inputId: "pdf-example-value",
+    applyExample: (example) => {
+      elements.pdfUrlInput.value = example.pdfUrl
+        ? new URL(example.pdfUrl, window.location.origin).toString()
+        : "";
+      elements.schemaInput.value = example.schema;
+      syncWorkspaceProofSnapshot(elements.pdfUrlInput, elements.rawInputPreview, "Select a sample PDF or paste a file URL to preview the source used for extraction.");
+    }
+  });
+  bindWorkspaceProofSnapshot({
+    input: elements.pdfUrlInput,
+    preview: elements.rawInputPreview,
+    placeholder: "Select a sample PDF or paste a file URL to preview the source used for extraction."
+  });
 
   elements.submitButton.addEventListener("click", async () => {
     const schema = parseSchema(elements.schemaInput.value);
@@ -31,6 +47,7 @@ export function initPdfExtractFeature(callApi: <T>(
       idleMessage: "Run a PDF extraction to see the response.",
       pendingMessage: "Fetching and extracting PDF...",
       successMessage: "PDF extraction complete.",
+      onSuccess: revealDemandFollowups,
       request: () =>
         callApi("/v1/extract-pdf", {
           method: "POST",

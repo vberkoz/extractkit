@@ -1,4 +1,5 @@
 import { getErrorMessage, setStatus } from "../../../lib/dom";
+import { scrollElementWithOffset } from "../../../lib/router";
 import { ensureIdleMessage, formatResultPayload } from "./results";
 
 export async function runPendingState(
@@ -20,6 +21,8 @@ export async function runAction(options: {
   pendingMessage: string;
   successMessage: string;
   request: () => Promise<unknown>;
+  onSuccess?: (response: unknown) => void;
+  scrollOffset?: number;
 }): Promise<void> {
   await runPendingState(options.button, options.statusEl, options.pendingMessage);
 
@@ -27,6 +30,10 @@ export async function runAction(options: {
     const response = await options.request();
     options.resultEl.textContent = formatResultPayload(response);
     setStatus(options.statusEl, options.successMessage, "success");
+    options.onSuccess?.(response);
+    window.requestAnimationFrame(() => {
+      scrollElementWithOffset(options.button, options.scrollOffset ?? 24);
+    });
   } catch (error) {
     options.resultEl.textContent = formatResultPayload({
       error: getErrorMessage(error)

@@ -22,3 +22,4 @@ await cp(resolve(rootDir, "frontend/index.html"), resolve(outDir, "index.html"))
 await cp(resolve(rootDir, "frontend/favicon.svg"), resolve(outDir, "favicon.svg"));
 await cp(resolve(rootDir, "frontend/styles.css"), resolve(outDir, "styles.css"));
 await cp(resolve(rootDir, "frontend/styles"), resolve(outDir, "styles"), { recursive: true });
+await cp(resolve(rootDir, "frontend/assets"), resolve(outDir, "assets"), { recursive: true });

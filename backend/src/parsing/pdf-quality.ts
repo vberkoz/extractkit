@@ -1,5 +1,8 @@
 export function isUsableNativePdfText(text: string): boolean {
-  return scorePdfTextQuality(text) >= 4;
+  // Keep short-but-legible PDFs on the native text path instead of forcing OCR.
+  // A score of 2 still filters out empty / garbled extraction while allowing
+  // compact documents like one-page forms and sample PDFs to pass through.
+  return scorePdfTextQuality(text) >= 2;
 }
 
 export function pickPreferredPdfPageText(nativeText: string, ocrText: string): string {

@@ -1,6 +1,7 @@
 import { TabId } from "../../lib/types";
 import { getWorkspacePanels } from "./selectors";
 import { WorkspaceTabOptions } from "./types";
+import { scrollElementWithOffset } from "../../lib/router";
 
 // Coordinates tab state for the live workspace after the page shell is mounted.
 export function initWorkspaceTabs(options: WorkspaceTabOptions): () => void {
@@ -75,10 +76,7 @@ function activateTab(
   }
 
   if (options.scrollPanelIntoView) {
-    document.querySelector<HTMLElement>(`[data-panel="${tabId}"]`)?.scrollIntoView({
-      behavior: "smooth",
-      block: "start"
-    });
+    scrollElementWithOffset(document.querySelector<HTMLElement>(`[data-panel="${tabId}"]`), 24);
   }
 }
 

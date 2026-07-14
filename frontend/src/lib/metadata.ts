@@ -7,8 +7,8 @@ export function updateDocumentMetadata(route: AppRoute): void {
         description: "View analytics, operational health, and request mix for ExtractKit."
       }
     : {
-        title: "ExtractKit",
-        description: "Structured extraction for developer teams with a clean demo workspace."
+        title: "ExtractKit | Turn messy docs into structured JSON",
+        description: "See if your extraction problem is solvable before you build it. Paste text, URLs, or PDFs and turn them into structured JSON in minutes."
       };
 
   document.title = metadata.title;

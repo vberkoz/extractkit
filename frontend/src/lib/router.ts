@@ -27,23 +27,33 @@ export function scrollToAnchoredSectionIfNeeded(hash: string): void {
 
   if (isWorkspaceTabId(normalizedHash)) {
     window.requestAnimationFrame(() => {
-      document.querySelector<HTMLElement>(`[data-panel="${normalizedHash}"]`)?.scrollIntoView({
-        behavior: "smooth",
-        block: "start"
-      });
+      scrollElementWithOffset(
+        document.querySelector<HTMLElement>(`[data-panel="${normalizedHash}"]`),
+        24
+      );
     });
 
     return;
   }
 
   window.requestAnimationFrame(() => {
-    document.getElementById(normalizedHash)?.scrollIntoView({
-      behavior: "smooth",
-      block: "start"
-    });
+    scrollElementWithOffset(document.getElementById(normalizedHash), 24);
   });
 }
 
 function isWorkspaceTabId(value: string): value is TabId {
   return value === "text-extract" || value === "url-extract" || value === "pdf-extract";
+}
+
+export function scrollElementWithOffset(element: HTMLElement | null, offset: number): void {
+  if (!element) {
+    return;
+  }
+
+  const top = window.scrollY + element.getBoundingClientRect().top - offset;
+
+  window.scrollTo({
+    behavior: "smooth",
+    top: Math.max(0, top)
+  });
 }

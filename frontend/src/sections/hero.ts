@@ -2,15 +2,15 @@ export function renderHeroSection(): string {
   return `
     <section id="hero" class="hero stats-hero section-stack">
       <div class="section-heading hero-heading">
-        <p class="eyebrow">structured extraction for developer teams</p>
-        <h1>Ship extraction flows with the feel of an ops dashboard.</h1>
+        <p class="eyebrow">turn messy docs into structured JSON</p>
+        <h1>See if your extraction problem is solvable before you build it.</h1>
         <p class="section-copy">
-          Test text, URL, and PDF extraction from one clean surface, with live usage visibility and local API key bootstrap running quietly in the background.
+          Paste a document, page, or PDF and watch it turn into usable JSON in minutes, so you can validate the workflow before committing engineering time.
         </p>
       </div>
 
       <div class="stats-actions hero-actions">
-        <a class="button button-primary" href="#demo">Open live demo</a>
+        <a class="button button-primary" href="#demand-capture">Tell us what you’re extracting</a>
       </div>
 
       <section class="stats-grid hero-metrics" aria-label="Product highlights">
