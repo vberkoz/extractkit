@@ -311,6 +311,47 @@
   gap: 10px;
 }
 
+.use-case-grid {
+  align-items: stretch;
+}
+
+.use-case-card {
+  display: grid;
+  gap: 8px;
+}
+
+.use-case-kicker {
+  margin: 0;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.use-case-card h3 {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.25;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.use-case-problem,
+.use-case-data,
+.use-case-next {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+  font-size: 0.84rem;
+}
+
+.use-case-data,
+.use-case-next {
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
 .pricing-panel {
   display: grid;
   gap: 14px;
