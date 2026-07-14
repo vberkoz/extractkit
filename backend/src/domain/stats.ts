@@ -14,4 +14,11 @@ export type StatsResponse = {
   totalJobs: number;
   completedJobsToday: number;
   averageResultSizeBytes: number;
+  demandSignals: {
+    total: number;
+    today: number;
+    latestAt: string | null;
+    topSourceFormat: string | null;
+    topFrequency: string | null;
+  };
 };

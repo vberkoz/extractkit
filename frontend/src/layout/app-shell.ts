@@ -1,4 +1,5 @@
 import { renderWorkspaceSection } from "../features/workspace/render";
+import { renderDemandCaptureSection } from "../features/demand-capture/render";
 import { renderHeroSection } from "../sections/hero";
 import { renderUseCasesSection } from "../sections/use-cases";
 import { renderHeader } from "./header";
@@ -12,6 +13,7 @@ export function renderHomeShell(): string {
         ${renderHeroSection()}
         ${renderWorkspaceSection()}
         ${renderUseCasesSection()}
+        ${renderDemandCaptureSection()}
       </main>
     </div>
   `;

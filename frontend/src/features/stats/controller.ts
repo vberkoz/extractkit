@@ -56,6 +56,11 @@ export function initStatsFeature(): void {
     elements.completedJobsTodayValue.textContent = formatNumber(data.completedJobsToday);
     elements.averageResultSizeValue.textContent = formatBytes(data.averageResultSizeBytes);
     elements.generatedAtValue.textContent = formatTimestamp(data.generatedAt);
+    elements.demandTotalValue.textContent = formatNumber(data.demandSignals.total);
+    elements.demandTodayValue.textContent = formatNumber(data.demandSignals.today);
+    elements.demandTopSourceValue.textContent = formatLabel(data.demandSignals.topSourceFormat);
+    elements.demandTopFrequencyValue.textContent = formatLabel(data.demandSignals.topFrequency);
+    elements.demandLatestValue.textContent = formatOptionalTimestamp(data.demandSignals.latestAt);
   }
 }
 
@@ -85,10 +90,26 @@ function formatTimestamp(value: string): string {
   }).format(new Date(value));
 }
 
+function formatOptionalTimestamp(value: string | null): string {
+  return value ? formatTimestamp(value) : "-";
+}
+
 function getShare(value: number, total: number): number {
   if (total === 0) {
     return 0;
   }
 
   return Math.round((value / total) * 100);
+}
+
+function formatLabel(value: string | null): string {
+  if (!value) {
+    return "-";
+  }
+
+  return value
+    .split(/[\s-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }

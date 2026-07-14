@@ -89,6 +89,37 @@ export function renderStatsSection(): string {
           </div>
         </article>
       </section>
+
+      <section class="stats-panels demand-panels">
+        <article class="panel stats-panel demand-panel">
+          <div class="panel-heading">
+            <p class="workspace-kicker">Demand signals</p>
+            <h3>What visitors are trying to extract</h3>
+          </div>
+          <div class="stats-list">
+            <div class="stat-line">
+              <span>Total captures</span>
+              <strong id="stats-demand-total">-</strong>
+            </div>
+            <div class="stat-line">
+              <span>Captured today</span>
+              <strong id="stats-demand-today">-</strong>
+            </div>
+            <div class="stat-line">
+              <span>Top source format</span>
+              <strong id="stats-demand-top-source">-</strong>
+            </div>
+            <div class="stat-line">
+              <span>Top cadence</span>
+              <strong id="stats-demand-top-frequency">-</strong>
+            </div>
+            <div class="stat-line">
+              <span>Latest capture</span>
+              <strong id="stats-demand-latest">-</strong>
+            </div>
+          </div>
+        </article>
+      </section>
     </main>
   `;
 }

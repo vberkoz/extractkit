@@ -2,6 +2,7 @@ import { API_BASE_URL } from "../config/runtime";
 import { createApiClient } from "./api";
 import { AppRoute } from "./types";
 import { initPdfExtractFeature } from "../features/pdf-extract/controller";
+import { initDemandCaptureFeature } from "../features/demand-capture/controller";
 import { initStatsFeature } from "../features/stats/controller";
 import { initTextExtractFeature } from "../features/text-extract/controller";
 import { initUrlExtractFeature } from "../features/url-extract/controller";
@@ -45,6 +46,23 @@ export function startApp(): void {
     const currentUrl = new URL(window.location.href);
 
     if (nextUrl.origin !== currentUrl.origin) {
+      return;
+    }
+
+    if (link.classList.contains("brand")) {
+      event.preventDefault();
+
+      if (nextUrl.pathname === currentUrl.pathname && nextUrl.search === currentUrl.search) {
+        window.history.replaceState(null, "", `${nextUrl.pathname}${nextUrl.search}`);
+        window.scrollTo({
+          behavior: "smooth",
+          top: 0
+        });
+        return;
+      }
+
+      window.history.pushState(null, "", `${nextUrl.pathname}${nextUrl.search}`);
+      void renderCurrentRoute();
       return;
     }
 
@@ -98,6 +116,7 @@ function renderRouteShell(appRoot: HTMLElement, route: AppRoute): void {
 }
 
 async function mountHomeRoute(): Promise<() => void> {
+  const cleanupDemandCapture = initDemandCaptureFeature();
   const apiKey = await ensureApiKey(API_BASE_URL);
 
   const callApi = createApiClient({
@@ -109,7 +128,12 @@ async function mountHomeRoute(): Promise<() => void> {
   initUrlExtractFeature(callApi);
   initPdfExtractFeature(callApi);
 
-  return initWorkspaceTabs({
+  const cleanupWorkspaceTabs = initWorkspaceTabs({
     defaultTab: "text-extract"
   });
+
+  return () => {
+    cleanupDemandCapture();
+    cleanupWorkspaceTabs();
+  };
 }

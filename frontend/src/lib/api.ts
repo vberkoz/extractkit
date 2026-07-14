@@ -47,6 +47,32 @@ export function createApiClient(options: {
   };
 }
 
+export async function postPublicJson<T>(
+  apiBaseUrl: string,
+  path: string,
+  body: Record<string, unknown>
+): Promise<T> {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json"
+    },
+    body: JSON.stringify(body)
+  });
+
+  const payload = (await response.json()) as ApiResponse<T>;
+
+  if (!response.ok || !payload.ok) {
+    throw new Error(
+      payload.ok
+        ? `Request failed with status ${response.status}.`
+        : payload.error.message
+    );
+  }
+
+  return payload.data;
+}
+
 export function buildCurlExample(
   apiBaseUrl: string,
   path: string,

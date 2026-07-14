@@ -42,4 +42,18 @@ export type StatsData = {
   totalJobs: number;
   completedJobsToday: number;
   averageResultSizeBytes: number;
+  demandSignals: {
+    total: number;
+    today: number;
+    latestAt: string | null;
+    topSourceFormat: string | null;
+    topFrequency: string | null;
+  };
 };
+
+export type DemandCaptureData = {
+  leadId: string;
+  capturedAt: string;
+};
+
+export type DemandCaptureResponse = ApiResponse<DemandCaptureData>;

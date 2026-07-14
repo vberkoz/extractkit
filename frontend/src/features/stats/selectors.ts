@@ -16,6 +16,11 @@ export function getStatsElements() {
     completedJobsTodayValue: getById<HTMLElement>("stats-completed-jobs-today"),
     averageResultSizeValue: getById<HTMLElement>("stats-average-result-size"),
     generatedAtValue: getById<HTMLElement>("stats-generated-at"),
+    demandTotalValue: getById<HTMLElement>("stats-demand-total"),
+    demandTodayValue: getById<HTMLElement>("stats-demand-today"),
+    demandTopSourceValue: getById<HTMLElement>("stats-demand-top-source"),
+    demandTopFrequencyValue: getById<HTMLElement>("stats-demand-top-frequency"),
+    demandLatestValue: getById<HTMLElement>("stats-demand-latest"),
     status: getById<HTMLElement>("stats-status")
   };
 }
