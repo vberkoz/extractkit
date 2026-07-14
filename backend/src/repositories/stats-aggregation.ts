@@ -7,8 +7,13 @@ export type StatsItem = DynamoRecord & {
   SK?: string;
   jobId?: string;
   createdAt?: string;
+  eventType?: string;
+  useCaseId?: string;
+  useCaseLabel?: string;
   sourceFormat?: string;
   frequency?: string;
+  sampleKind?: string;
+  schemaEdited?: boolean;
   disabled?: boolean;
   amount?: number;
   yyyyMM?: string;
@@ -32,11 +37,17 @@ export function buildStatsSnapshot(
   let textJobs = 0;
   let urlJobs = 0;
   let pdfJobs = 0;
-  let demandTotal = 0;
-  let demandToday = 0;
-  let latestDemandAt: string | null = null;
+  let followUpRequests = 0;
+  let followUpToday = 0;
+  let latestFollowUpAt: string | null = null;
+  let heroCtaClicks = 0;
+  let sampleSelections = 0;
+  let schemaEdits = 0;
+  let extractionStarted = 0;
+  let extractionSucceeded = 0;
   const sourceFormatCounts = new Map<string, number>();
   const frequencyCounts = new Map<string, number>();
+  const useCaseCounts = new Map<string, number>();
 
   for (const item of items) {
     if (item.entityType === "API_KEY" && item.disabled !== true) {
@@ -54,22 +65,41 @@ export function buildStatsSnapshot(
         totalResultSizeBytes += Buffer.byteLength(JSON.stringify(item.result), "utf8");
         resultCount += 1;
       } else if (item.entityType === "LEAD" && item.SK === "METADATA") {
-        demandTotal += 1;
+        followUpRequests += 1;
 
         if (typeof item.createdAt === "string" && item.createdAt.slice(0, 10) === today) {
-          demandToday += 1;
+          followUpToday += 1;
         }
 
         if (typeof item.createdAt === "string") {
           const createdAt = item.createdAt;
 
-          if (latestDemandAt === null || createdAt > latestDemandAt) {
-            latestDemandAt = createdAt;
+          if (latestFollowUpAt === null || createdAt > latestFollowUpAt) {
+            latestFollowUpAt = createdAt;
           }
         }
 
         trackCount(sourceFormatCounts, item.sourceFormat);
         trackCount(frequencyCounts, item.frequency);
+      } else if (item.entityType === "EVENT" && item.SK === "METADATA") {
+        switch (item.eventType) {
+          case "hero_cta_click":
+            heroCtaClicks += 1;
+            break;
+          case "sample_selected":
+            sampleSelections += 1;
+            break;
+          case "schema_edited":
+            schemaEdits += 1;
+            break;
+          case "extraction_started":
+            extractionStarted += 1;
+            trackCount(useCaseCounts, item.useCaseLabel ?? item.useCaseId);
+            break;
+          case "extraction_succeeded":
+            extractionSucceeded += 1;
+            break;
+        }
       }
 
       continue;
@@ -110,11 +140,22 @@ export function buildStatsSnapshot(
     completedJobsToday,
     averageResultSizeBytes: resultCount === 0 ? 0 : Math.round(totalResultSizeBytes / resultCount),
     demandSignals: {
-      total: demandTotal,
-      today: demandToday,
-      latestAt: latestDemandAt,
-      topSourceFormat: getTopCountLabel(sourceFormatCounts),
-      topFrequency: getTopCountLabel(frequencyCounts)
+      followUpRequests: {
+        total: followUpRequests,
+        today: followUpToday,
+        latestAt: latestFollowUpAt,
+        topSourceFormat: getTopCountLabel(sourceFormatCounts),
+        topFrequency: getTopCountLabel(frequencyCounts)
+      },
+      intentFunnel: {
+        heroCtaClicks,
+        sampleSelections,
+        schemaEdits,
+        extractionStarted,
+        extractionSucceeded,
+        extractionSuccessRate: extractionStarted === 0 ? 0 : Math.round((extractionSucceeded / extractionStarted) * 100),
+        topUseCase: getTopCountLabel(useCaseCounts)
+      }
     }
   };
 }

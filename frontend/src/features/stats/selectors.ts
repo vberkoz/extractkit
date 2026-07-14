@@ -16,11 +16,18 @@ export function getStatsElements() {
     completedJobsTodayValue: getById<HTMLElement>("stats-completed-jobs-today"),
     averageResultSizeValue: getById<HTMLElement>("stats-average-result-size"),
     generatedAtValue: getById<HTMLElement>("stats-generated-at"),
-    demandTotalValue: getById<HTMLElement>("stats-demand-total"),
-    demandTodayValue: getById<HTMLElement>("stats-demand-today"),
-    demandTopSourceValue: getById<HTMLElement>("stats-demand-top-source"),
-    demandTopFrequencyValue: getById<HTMLElement>("stats-demand-top-frequency"),
-    demandLatestValue: getById<HTMLElement>("stats-demand-latest"),
+    followUpTotalValue: getById<HTMLElement>("stats-follow-up-total"),
+    followUpTodayValue: getById<HTMLElement>("stats-follow-up-today"),
+    followUpTopSourceValue: getById<HTMLElement>("stats-follow-up-top-source"),
+    followUpTopFrequencyValue: getById<HTMLElement>("stats-follow-up-top-frequency"),
+    followUpLatestValue: getById<HTMLElement>("stats-follow-up-latest"),
+    heroCtaClicksValue: getById<HTMLElement>("stats-hero-cta-clicks"),
+    sampleSelectionsValue: getById<HTMLElement>("stats-sample-selections"),
+    schemaEditsValue: getById<HTMLElement>("stats-schema-edits"),
+    extractionStartedValue: getById<HTMLElement>("stats-extraction-started"),
+    extractionSucceededValue: getById<HTMLElement>("stats-extraction-succeeded"),
+    extractionSuccessRateValue: getById<HTMLElement>("stats-extraction-success-rate"),
+    topUseCaseValue: getById<HTMLElement>("stats-top-use-case"),
     status: getById<HTMLElement>("stats-status")
   };
 }

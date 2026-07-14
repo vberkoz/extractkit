@@ -43,11 +43,22 @@ export type StatsData = {
   completedJobsToday: number;
   averageResultSizeBytes: number;
   demandSignals: {
-    total: number;
-    today: number;
-    latestAt: string | null;
-    topSourceFormat: string | null;
-    topFrequency: string | null;
+    followUpRequests: {
+      total: number;
+      today: number;
+      latestAt: string | null;
+      topSourceFormat: string | null;
+      topFrequency: string | null;
+    };
+    intentFunnel: {
+      heroCtaClicks: number;
+      sampleSelections: number;
+      schemaEdits: number;
+      extractionStarted: number;
+      extractionSucceeded: number;
+      extractionSuccessRate: number;
+      topUseCase: string | null;
+    };
   };
 };
 
@@ -57,3 +68,10 @@ export type DemandCaptureData = {
 };
 
 export type DemandCaptureResponse = ApiResponse<DemandCaptureData>;
+
+export type IntentEventData = {
+  eventId: string;
+  capturedAt: string;
+};
+
+export type IntentEventResponse = ApiResponse<IntentEventData>;

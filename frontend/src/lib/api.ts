@@ -50,13 +50,17 @@ export function createApiClient(options: {
 export async function postPublicJson<T>(
   apiBaseUrl: string,
   path: string,
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
+  options?: {
+    keepalive?: boolean;
+  }
 ): Promise<T> {
   const response = await fetch(`${apiBaseUrl}${path}`, {
     method: "POST",
     headers: {
       "content-type": "application/json"
     },
+    keepalive: options?.keepalive,
     body: JSON.stringify(body)
   });
 

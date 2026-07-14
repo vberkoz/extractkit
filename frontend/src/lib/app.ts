@@ -12,6 +12,7 @@ import { renderStatsShell } from "../layout/stats-shell";
 import { ensureApiKey } from "./api-key";
 import { updateDocumentMetadata } from "./metadata";
 import { getRouteFromLocation, scrollToAnchoredSectionIfNeeded } from "./router";
+import { trackIntentEvent } from "./telemetry";
 
 export function startApp(): void {
   const appRoot = getAppRoot();
@@ -47,6 +48,13 @@ export function startApp(): void {
 
     if (nextUrl.origin !== currentUrl.origin) {
       return;
+    }
+
+    if (link.dataset.intentEvent) {
+      void trackIntentEvent({
+        eventType: link.dataset.intentEvent as "hero_cta_click",
+        surface: (link.dataset.intentSurface as "hero") ?? "hero"
+      });
     }
 
     if (link.classList.contains("brand")) {

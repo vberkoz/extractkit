@@ -56,11 +56,18 @@ export function initStatsFeature(): void {
     elements.completedJobsTodayValue.textContent = formatNumber(data.completedJobsToday);
     elements.averageResultSizeValue.textContent = formatBytes(data.averageResultSizeBytes);
     elements.generatedAtValue.textContent = formatTimestamp(data.generatedAt);
-    elements.demandTotalValue.textContent = formatNumber(data.demandSignals.total);
-    elements.demandTodayValue.textContent = formatNumber(data.demandSignals.today);
-    elements.demandTopSourceValue.textContent = formatLabel(data.demandSignals.topSourceFormat);
-    elements.demandTopFrequencyValue.textContent = formatLabel(data.demandSignals.topFrequency);
-    elements.demandLatestValue.textContent = formatOptionalTimestamp(data.demandSignals.latestAt);
+    elements.followUpTotalValue.textContent = formatNumber(data.demandSignals.followUpRequests.total);
+    elements.followUpTodayValue.textContent = formatNumber(data.demandSignals.followUpRequests.today);
+    elements.followUpTopSourceValue.textContent = formatLabel(data.demandSignals.followUpRequests.topSourceFormat);
+    elements.followUpTopFrequencyValue.textContent = formatLabel(data.demandSignals.followUpRequests.topFrequency);
+    elements.followUpLatestValue.textContent = formatOptionalTimestamp(data.demandSignals.followUpRequests.latestAt);
+    elements.heroCtaClicksValue.textContent = formatNumber(data.demandSignals.intentFunnel.heroCtaClicks);
+    elements.sampleSelectionsValue.textContent = formatNumber(data.demandSignals.intentFunnel.sampleSelections);
+    elements.schemaEditsValue.textContent = formatNumber(data.demandSignals.intentFunnel.schemaEdits);
+    elements.extractionStartedValue.textContent = formatNumber(data.demandSignals.intentFunnel.extractionStarted);
+    elements.extractionSucceededValue.textContent = formatNumber(data.demandSignals.intentFunnel.extractionSucceeded);
+    elements.extractionSuccessRateValue.textContent = `${Math.round(data.demandSignals.intentFunnel.extractionSuccessRate)}%`;
+    elements.topUseCaseValue.textContent = formatLabel(data.demandSignals.intentFunnel.topUseCase);
   }
 }
 

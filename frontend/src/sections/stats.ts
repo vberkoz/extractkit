@@ -93,29 +93,66 @@ export function renderStatsSection(): string {
       <section class="stats-panels demand-panels">
         <article class="panel stats-panel demand-panel">
           <div class="panel-heading">
-            <p class="workspace-kicker">Demand signals</p>
-            <h3>What visitors are trying to extract</h3>
+            <p class="workspace-kicker">Follow-up requests</p>
+            <h3>Who wants help after the demo</h3>
           </div>
           <div class="stats-list">
             <div class="stat-line">
-              <span>Total captures</span>
-              <strong id="stats-demand-total">-</strong>
+              <span>Total requests</span>
+              <strong id="stats-follow-up-total">-</strong>
             </div>
             <div class="stat-line">
-              <span>Captured today</span>
-              <strong id="stats-demand-today">-</strong>
+              <span>Requested today</span>
+              <strong id="stats-follow-up-today">-</strong>
             </div>
             <div class="stat-line">
               <span>Top source format</span>
-              <strong id="stats-demand-top-source">-</strong>
+              <strong id="stats-follow-up-top-source">-</strong>
             </div>
             <div class="stat-line">
               <span>Top cadence</span>
-              <strong id="stats-demand-top-frequency">-</strong>
+              <strong id="stats-follow-up-top-frequency">-</strong>
             </div>
             <div class="stat-line">
-              <span>Latest capture</span>
-              <strong id="stats-demand-latest">-</strong>
+              <span>Latest request</span>
+              <strong id="stats-follow-up-latest">-</strong>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel stats-panel demand-panel">
+          <div class="panel-heading">
+            <p class="workspace-kicker">Intent funnel</p>
+            <h3>How much proof the workspace is creating</h3>
+          </div>
+          <div class="stats-list">
+            <div class="stat-line">
+              <span>Hero CTA clicks</span>
+              <strong id="stats-hero-cta-clicks">-</strong>
+            </div>
+            <div class="stat-line">
+              <span>Sample selections</span>
+              <strong id="stats-sample-selections">-</strong>
+            </div>
+            <div class="stat-line">
+              <span>Schema edits</span>
+              <strong id="stats-schema-edits">-</strong>
+            </div>
+            <div class="stat-line">
+              <span>Extraction starts</span>
+              <strong id="stats-extraction-started">-</strong>
+            </div>
+            <div class="stat-line">
+              <span>Extraction successes</span>
+              <strong id="stats-extraction-succeeded">-</strong>
+            </div>
+            <div class="stat-line">
+              <span>Extraction success rate</span>
+              <strong id="stats-extraction-success-rate">-</strong>
+            </div>
+            <div class="stat-line">
+              <span>Top use case</span>
+              <strong id="stats-top-use-case">-</strong>
             </div>
           </div>
         </article>

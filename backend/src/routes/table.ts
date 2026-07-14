@@ -2,6 +2,7 @@ import { handleCreateDevApiKey } from "./dev-api-key";
 import { handleExtract } from "./extract";
 import { handleExtractPdf } from "./extract-pdf";
 import { handleExtractUrl } from "./extract-url";
+import { handleCreateIntentEvent } from "./event";
 import { handleCreateInterestCapture } from "./interest";
 import { handleGetJob } from "./jobs";
 import { handleHealth } from "./health";
@@ -54,6 +55,11 @@ export const ROUTES: RouteDefinition[] = [
     requireAuth: true,
     matches: exactRoute("GET", "/v1/usage"),
     handler: authRoute((_event, auth) => handleGetUsage(auth))
+  },
+  {
+    requireAuth: false,
+    matches: exactRoute("POST", "/v1/events"),
+    handler: (event) => handleCreateIntentEvent(event)
   },
   {
     requireAuth: false,

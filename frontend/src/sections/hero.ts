@@ -10,7 +10,14 @@ export function renderHeroSection(): string {
       </div>
 
       <div class="stats-actions hero-actions">
-        <a class="button button-primary" href="#demand-capture">Tell us what you’re extracting</a>
+        <a
+          class="button button-primary"
+          href="#demand-capture"
+          data-intent-event="hero_cta_click"
+          data-intent-surface="hero"
+        >
+          Tell us what you’re extracting
+        </a>
       </div>
 
       <section class="stats-grid hero-metrics" aria-label="Product highlights">

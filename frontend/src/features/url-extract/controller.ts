@@ -5,6 +5,7 @@ import { runAction } from "../workspace/shared/actions";
 import { bindWorkspaceExamplePicker } from "../workspace/examples";
 import { bindWorkspaceProofSnapshot, syncWorkspaceProofSnapshot } from "../workspace/proof";
 import { getUrlExtractElements } from "./selectors";
+import { trackIntentEvent } from "../../lib/telemetry";
 
 export function initUrlExtractFeature(callApi: <T>(
   path: string,
@@ -14,15 +15,34 @@ export function initUrlExtractFeature(callApi: <T>(
   }
 ) => Promise<T>): void {
   const elements = getUrlExtractElements();
+  let activeExampleId = "";
+  let activeExampleLabel = "";
+  let activeSchema = "";
+  let schemaEditedTracked = false;
+
   bindWorkspaceExamplePicker({
     kind: "url",
     inputId: "url-example-value",
     applyExample: (example) => {
+      activeExampleId = example.id;
+      activeExampleLabel = example.label;
+      activeSchema = example.schema;
+      schemaEditedTracked = false;
       elements.urlInput.value = example.url ?? "";
       elements.schemaInput.value = example.schema;
       syncWorkspaceProofSnapshot(elements.urlInput, elements.rawInputPreview, "Select a sample page or paste a URL to preview the source used for extraction.");
+    },
+    onSelect: (example) => {
+      void trackIntentEvent({
+        eventType: "sample_selected",
+        surface: "workspace",
+        sampleKind: "url",
+        useCaseId: example.id,
+        useCaseLabel: example.label
+      });
     }
   });
+  bindSchemaEditTracker();
   bindWorkspaceProofSnapshot({
     input: elements.urlInput,
     preview: elements.rawInputPreview,
@@ -45,7 +65,27 @@ export function initUrlExtractFeature(callApi: <T>(
       idleMessage: "Run a URL extraction to see the response.",
       pendingMessage: "Fetching and extracting URL...",
       successMessage: "URL extraction complete.",
-      onSuccess: revealDemandFollowups,
+      onStart: () => {
+        void trackIntentEvent({
+          eventType: "extraction_started",
+          surface: "workspace",
+          sampleKind: "url",
+          useCaseId: activeExampleId,
+          useCaseLabel: activeExampleLabel,
+          schemaEdited: schemaEditedTracked
+        });
+      },
+      onSuccess: () => {
+        void trackIntentEvent({
+          eventType: "extraction_succeeded",
+          surface: "workspace",
+          sampleKind: "url",
+          useCaseId: activeExampleId,
+          useCaseLabel: activeExampleLabel,
+          schemaEdited: schemaEditedTracked
+        });
+        revealDemandFollowups();
+      },
       request: () =>
         callApi("/v1/extract-url", {
           method: "POST",
@@ -56,4 +96,22 @@ export function initUrlExtractFeature(callApi: <T>(
         })
     });
   });
+
+  function bindSchemaEditTracker(): void {
+    elements.schemaInput.addEventListener("input", () => {
+      if (schemaEditedTracked || elements.schemaInput.value === activeSchema) {
+        return;
+      }
+
+      schemaEditedTracked = true;
+      void trackIntentEvent({
+        eventType: "schema_edited",
+        surface: "workspace",
+        sampleKind: "url",
+        useCaseId: activeExampleId,
+        useCaseLabel: activeExampleLabel,
+        schemaEdited: true
+      });
+    });
+  }
 }

@@ -31,6 +31,7 @@ export function bindWorkspaceExamplePicker(options: {
   kind: ExampleKind;
   inputId: string;
   applyExample: (example: WorkspaceExample) => void;
+  onSelect?: (example: WorkspaceExample) => void;
 }): () => void {
   const input = document.getElementById(options.inputId) as HTMLInputElement | null;
 
@@ -51,6 +52,7 @@ export function bindWorkspaceExamplePicker(options: {
 
     if (selected) {
       options.applyExample(selected);
+      options.onSelect?.(selected);
     }
   };
 

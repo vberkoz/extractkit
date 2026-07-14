@@ -21,12 +21,14 @@ export async function runAction(options: {
   pendingMessage: string;
   successMessage: string;
   request: () => Promise<unknown>;
+  onStart?: () => void;
   onSuccess?: (response: unknown) => void;
   scrollOffset?: number;
 }): Promise<void> {
   await runPendingState(options.button, options.statusEl, options.pendingMessage);
 
   try {
+    options.onStart?.();
     const response = await options.request();
     options.resultEl.textContent = formatResultPayload(response);
     setStatus(options.statusEl, options.successMessage, "success");
